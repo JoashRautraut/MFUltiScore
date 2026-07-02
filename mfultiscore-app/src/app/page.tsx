@@ -142,6 +142,11 @@ export default function Home() {
   const [screen, setScreen] = useState<Screen>("setup");
   const [date, setDate] = useState("2026-07-02");
   const [quickAddName, setQuickAddName] = useState("");
+  const [playerSearch, setPlayerSearch] = useState("");
+  const [matchup, setMatchup] = useState<{ home: TeamKey; away: TeamKey }>({
+    home: "team1",
+    away: "team2",
+  });
   const [playerAssignments, setPlayerAssignments] = useState<Record<string, TeamKey | null>>({
     Ava: null,
     Mia: null,
@@ -192,14 +197,45 @@ export default function Home() {
     [allSetupPlayers, playerAssignments],
   );
 
+  const filteredSetupPlayers = useMemo(() => {
+    const query = playerSearch.trim().toLowerCase();
+    if (!query) {
+      return allSetupPlayers;
+    }
+
+    return allSetupPlayers.filter((player) =>
+      player.toLowerCase().includes(query),
+    );
+  }, [allSetupPlayers, playerSearch]);
+
   const allActivePlayers = useMemo(
     () => flattenPlayers(teamPlayers),
     [teamPlayers],
   );
 
+  const matchupTeams = useMemo(
+    () => [matchup.home, matchup.away],
+    [matchup],
+  );
+
+  const matchupPlayers = useMemo(
+    () => ({
+      home: teamPlayers[matchup.home],
+      away: teamPlayers[matchup.away],
+    }),
+    [matchup, teamPlayers],
+  );
+
   const bestPlayerToday = useMemo(
-    () => getBestPlayer(teamPlayers),
-    [teamPlayers],
+    () =>
+      getBestPlayer({
+        team1: matchup.home === "team1" || matchup.away === "team1" ? teamPlayers.team1 : [],
+        team2: matchup.home === "team2" || matchup.away === "team2" ? teamPlayers.team2 : [],
+        team3: matchup.home === "team3" || matchup.away === "team3" ? teamPlayers.team3 : [],
+        team4: matchup.home === "team4" || matchup.away === "team4" ? teamPlayers.team4 : [],
+        team5: matchup.home === "team5" || matchup.away === "team5" ? teamPlayers.team5 : [],
+      }),
+    [matchup, teamPlayers],
   );
 
   const dashboardPlayers = useMemo(() => {
@@ -261,10 +297,8 @@ export default function Home() {
 
   function startMockGame() {
     const nextTeamPlayers = createEmptyTeamPlayers();
-    for (const option of TEAM_OPTIONS) {
-      nextTeamPlayers[option.key] = teamSelections[option.key].map((name) =>
-        createPlayer(name, option.key),
-      );
+    for (const key of matchupTeams) {
+      nextTeamPlayers[key] = teamSelections[key].map((name) => createPlayer(name, key));
     }
     setTeamPlayers(nextTeamPlayers);
     setLogEntries([]);
@@ -345,7 +379,13 @@ export default function Home() {
         endedAt: formatClockTime(new Date()),
         timerSeconds,
         teamPlayers,
-        bestPlayer: getBestPlayer(teamPlayers),
+        bestPlayer: getBestPlayer({
+          team1: matchup.home === "team1" || matchup.away === "team1" ? teamPlayers.team1 : [],
+          team2: matchup.home === "team2" || matchup.away === "team2" ? teamPlayers.team2 : [],
+          team3: matchup.home === "team3" || matchup.away === "team3" ? teamPlayers.team3 : [],
+          team4: matchup.home === "team4" || matchup.away === "team4" ? teamPlayers.team4 : [],
+          team5: matchup.home === "team5" || matchup.away === "team5" ? teamPlayers.team5 : [],
+        }),
       },
       ...current,
     ]);
@@ -485,6 +525,62 @@ export default function Home() {
                 </div>
               </div>
 
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-sm font-medium text-slate-600">Who is playing?</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
+                  <label className="block">
+                    <span className="text-sm text-slate-500">Team</span>
+                    <select
+                      value={matchup.home}
+                      onChange={(event) => {
+                        const nextHome = event.target.value as TeamKey;
+                        setMatchup((current) => ({
+                          home: nextHome,
+                          away: current.away === nextHome ? "team2" : current.away,
+                        }));
+                      }}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+                    >
+                      {TEAM_OPTIONS.map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="pb-3 text-center text-sm font-semibold uppercase tracking-wide text-slate-500">
+                    vs
+                  </div>
+
+                  <label className="block">
+                    <span className="text-sm text-slate-500">Team</span>
+                    <select
+                      value={matchup.away}
+                      onChange={(event) => {
+                        const nextAway = event.target.value as TeamKey;
+                        setMatchup((current) => ({
+                          home: current.home === nextAway ? "team1" : current.home,
+                          away: nextAway,
+                        }));
+                      }}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+                    >
+                      {TEAM_OPTIONS.map((option) => (
+                        <option key={option.key} value={option.key}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {matchup.home === matchup.away && (
+                  <p className="mt-3 text-sm text-amber-700">
+                    Choose two different teams for the matchup.
+                  </p>
+                )}
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
                 <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                   <p className="text-sm text-slate-500">No team</p>
@@ -506,7 +602,8 @@ export default function Home() {
               <button
                 type="button"
                 onClick={startMockGame}
-                className="w-full rounded-3xl bg-slate-900 px-5 py-4 text-lg font-semibold text-white shadow-sm"
+                disabled={matchup.home === matchup.away}
+                className="w-full rounded-3xl bg-slate-900 px-5 py-4 text-lg font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 Start live scoring
               </button>
@@ -518,8 +615,20 @@ export default function Home() {
                 <h2 className="mt-1 text-2xl font-semibold text-slate-900">Choose each player&apos;s team</h2>
               </div>
 
+              <div className="mb-4">
+                <label className="block">
+                  <span className="text-sm font-medium text-slate-600">Search players</span>
+                  <input
+                    value={playerSearch}
+                    onChange={(event) => setPlayerSearch(event.target.value)}
+                    placeholder="Search by player name"
+                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
+                  />
+                </label>
+              </div>
+
               <div className="grid gap-3">
-                {allSetupPlayers.map((player) => {
+                {filteredSetupPlayers.map((player) => {
                   const assignment = playerAssignments[player];
 
                   return (
@@ -562,6 +671,12 @@ export default function Home() {
                     </div>
                   );
                 })}
+
+                {filteredSetupPlayers.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                    No players match your search.
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -573,7 +688,9 @@ export default function Home() {
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-500">Live game</p>
-                  <h2 className="mt-1 text-2xl font-semibold text-slate-900">Live team scoring</h2>
+                  <h2 className="mt-1 text-2xl font-semibold text-slate-900">
+                    {getTeamLabel(matchup.home)} vs {getTeamLabel(matchup.away)}
+                  </h2>
                   <p className="mt-1 text-sm text-slate-600">{date}</p>
                 </div>
 
@@ -609,9 +726,8 @@ export default function Home() {
 
               <div className="grid gap-4 xl:grid-cols-[1.6fr_0.8fr]">
               <div className="grid gap-4 lg:grid-cols-2">
-                {TEAM_OPTIONS.filter((option) => teamPlayers[option.key].length > 0).map((option) =>
-                  renderPlayerCards(teamPlayers[option.key], option.key, option.label),
-                )}
+                {renderPlayerCards(matchupPlayers.home, matchup.home, getTeamLabel(matchup.home))}
+                {renderPlayerCards(matchupPlayers.away, matchup.away, getTeamLabel(matchup.away))}
               </div>
 
               <aside className="space-y-4">
