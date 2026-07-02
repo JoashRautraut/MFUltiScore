@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { STAT_TYPES, StatType } from "@/types/stats";
+import { clearAuthUser, getAuthUser, getRegisteredPlayers, type AuthUser } from "@/lib/auth";
 
 type Screen = "setup" | "live" | "summary" | "dashboard";
 type TeamIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
@@ -191,36 +193,19 @@ function getBestPlayer(teamPlayers: Record<TeamKey, ActivePlayer[]>) {
 }
 
 export default function Home() {
+  const router = useRouter();
+  const [authUser, setAuthUserState] = useState<AuthUser | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [screen, setScreen] = useState<Screen>("setup");
   const [date, setDate] = useState("2026-07-02");
   const [gameDurationMinutes, setGameDurationMinutes] = useState(20);
-  const [quickAddName, setQuickAddName] = useState("");
-  const [quickAddGender, setQuickAddGender] = useState<PlayerGender>("male");
   const [playerSearch, setPlayerSearch] = useState("");
   const [matchup, setMatchup] = useState<{ home: TeamKey; away: TeamKey }>({
     home: "team1",
     away: "team2",
   });
-  const [playerAssignments, setPlayerAssignments] = useState<Record<string, TeamKey | null>>({
-    Ava: null,
-    Mia: null,
-    Noah: null,
-    Kai: null,
-    Liam: null,
-    Zoe: null,
-    Eli: null,
-    Jade: null,
-  });
-  const [playerGenders, setPlayerGenders] = useState<Record<string, PlayerGender>>({
-    Ava: "female",
-    Mia: "female",
-    Noah: "male",
-    Kai: "male",
-    Liam: "male",
-    Zoe: "female",
-    Eli: "male",
-    Jade: "female",
-  });
+  const [playerAssignments, setPlayerAssignments] = useState<Record<string, TeamKey | null>>({});
+  const [playerGenders, setPlayerGenders] = useState<Record<string, PlayerGender>>({});
   const [teamPlayers, setTeamPlayers] = useState<Record<TeamKey, ActivePlayer[]>>(createEmptyTeamPlayers());
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -231,6 +216,39 @@ export default function Home() {
     () => Math.max(gameDurationMinutes, 1) * 60,
     [gameDurationMinutes],
   );
+
+  useEffect(() => {
+    const user = getAuthUser();
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+
+    setAuthUserState(user);
+
+    const registeredPlayers = getRegisteredPlayers();
+    setPlayerAssignments((current) => {
+      const next: Record<string, TeamKey | null> = {};
+      for (const player of registeredPlayers) {
+        next[player.name] = current[player.name] ?? null;
+      }
+      return next;
+    });
+    setPlayerGenders(() => {
+      const next: Record<string, PlayerGender> = {};
+      for (const player of registeredPlayers) {
+        next[player.name] = player.gender;
+      }
+      return next;
+    });
+
+    setIsAuthChecking(false);
+  }, [router]);
+
+  function handleLogout() {
+    clearAuthUser();
+    router.replace("/login");
+  }
 
   useEffect(() => {
     if (!timerRunning || timerSeconds <= 0) {
@@ -393,33 +411,6 @@ export default function Home() {
       ...current,
       [name]: team,
     }));
-  }
-
-  function quickAddPlayer() {
-    const normalized = quickAddName.trim();
-    if (!normalized) {
-      return;
-    }
-
-    setPlayerAssignments((current) =>
-      current[normalized] !== undefined
-        ? current
-        : {
-            ...current,
-            [normalized]: null,
-          },
-    );
-
-    setPlayerGenders((current) =>
-      current[normalized] !== undefined
-        ? current
-        : {
-            ...current,
-            [normalized]: quickAddGender,
-          },
-    );
-
-    setQuickAddName("");
   }
 
   function startMockGame() {
@@ -643,6 +634,14 @@ export default function Home() {
     );
   }
 
+  if (isAuthChecking) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+        <p className="text-sm text-slate-500">Loading...</p>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-gray-100 px-4 py-6 text-slate-900 sm:px-6">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -659,7 +658,23 @@ export default function Home() {
               </p>
             </div>
 
-            <nav className="grid grid-cols-2 gap-2 sm:flex">
+            <div className="flex flex-col gap-3 lg:items-end">
+              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
+                  Signed in as{" "}
+                  <span className="font-medium text-slate-900">{authUser?.playerName}</span>
+                  <span className="text-slate-400"> · @{authUser?.username}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  Log out
+                </button>
+              </div>
+
+              <nav className="grid grid-cols-2 gap-2 sm:flex">
               {[
                 ["setup", "Setup"],
                 ["live", "Live Game"],
@@ -679,7 +694,8 @@ export default function Home() {
                   {label}
                 </button>
               ))}
-            </nav>
+              </nav>
+            </div>
           </div>
         </header>
 
@@ -690,7 +706,7 @@ export default function Home() {
                 <p className="text-sm font-medium text-slate-500">Step 1</p>
                 <h2 className="mt-1 text-2xl font-semibold text-slate-900">Prepare the game</h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  Add players, then choose whether each player belongs to Team 1 to Team 5, or no team yet.
+                  Registered users are added as players automatically. Assign each player to a team, or leave them unassigned.
                 </p>
               </div>
 
@@ -723,33 +739,6 @@ export default function Home() {
                       className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     />
                   </label>
-                </div>
-
-                <div className="mt-4">
-                  <span className="text-sm font-medium text-slate-600">Quick add player</span>
-                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                    <input
-                      value={quickAddName}
-                      onChange={(event) => setQuickAddName(event.target.value)}
-                      placeholder="Type a new player name"
-                      className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                    />
-                    <select
-                      value={quickAddGender}
-                      onChange={(event) => setQuickAddGender(event.target.value as PlayerGender)}
-                      className="rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400 sm:w-36"
-                    >
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={quickAddPlayer}
-                      className="rounded-2xl bg-slate-900 px-4 py-3 font-medium text-white"
-                    >
-                      Add player
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -920,7 +909,9 @@ export default function Home() {
 
                 {filteredSetupPlayers.length === 0 && (
                   <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                    No players match your search.
+                    {playerSearch.trim()
+                      ? "No players match your search."
+                      : "No registered players yet. Create an account to be added as a player."}
                   </div>
                 )}
               </div>
