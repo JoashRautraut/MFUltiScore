@@ -1,20 +1,25 @@
 export type PlayerGender = "male" | "female";
 
+export type UserRole = "user" | "admin";
+
 export type RegisteredUser = {
   username: string;
   password: string;
   playerName: string;
   gender: PlayerGender;
+  role: UserRole;
 };
 
 export type AuthUser = {
   username: string;
   playerName: string;
   gender: PlayerGender;
+  role: UserRole;
 };
 
 const AUTH_STORAGE_KEY = "mfultiscore_auth";
 const USERS_STORAGE_KEY = "mfultiscore_users";
+const ADMIN_UNLOCK_KEY = "mfultiscore_admin_unlock";
 
 function normalizeUsername(username: string) {
   return username.trim().toLowerCase();
@@ -31,7 +36,11 @@ export function getAuthUser(): AuthUser | null {
   }
 
   try {
-    return JSON.parse(raw) as AuthUser;
+    const user = JSON.parse(raw) as AuthUser;
+    return {
+      ...user,
+      role: user.role ?? "user",
+    };
   } catch {
     return null;
   }
@@ -49,6 +58,25 @@ export function isAuthenticated(): boolean {
   return getAuthUser() !== null;
 }
 
+export function unlockAdminRegister() {
+  sessionStorage.setItem(ADMIN_UNLOCK_KEY, "1");
+}
+
+export function isAdminRegisterUnlocked(): boolean {
+  return sessionStorage.getItem(ADMIN_UNLOCK_KEY) === "1";
+}
+
+export function isAdmin(user: AuthUser | null): boolean {
+  return user?.role === "admin";
+}
+
+function normalizeRegisteredUser(user: RegisteredUser & { role?: UserRole }): RegisteredUser {
+  return {
+    ...user,
+    role: user.role ?? "user",
+  };
+}
+
 function getRegisteredUsers(): RegisteredUser[] {
   if (typeof window === "undefined") {
     return [];
@@ -60,7 +88,7 @@ function getRegisteredUsers(): RegisteredUser[] {
   }
 
   try {
-    return JSON.parse(raw) as RegisteredUser[];
+    return (JSON.parse(raw) as Array<RegisteredUser & { role?: UserRole }>).map(normalizeRegisteredUser);
   } catch {
     return [];
   }
@@ -77,12 +105,15 @@ export function getRegisteredPlayers(): { name: string; gender: PlayerGender }[]
   }));
 }
 
-export function registerUser(input: {
+export function getAllRegisteredUsers(): Omit<RegisteredUser, "password">[] {
+  return getRegisteredUsers().map(({ password: _password, ...user }) => user);
+}
+
+function validateRegistrationInput(input: {
   username: string;
   password: string;
   playerName: string;
-  gender: PlayerGender;
-}): { ok: true } | { ok: false; error: string } {
+}): { ok: true; username: string; password: string; playerName: string } | { ok: false; error: string } {
   const username = input.username.trim();
   const password = input.password.trim();
   const playerName = input.playerName.trim();
@@ -103,7 +134,24 @@ export function registerUser(input: {
     return { ok: false, error: "Password must be at least 4 characters." };
   }
 
-  const normalizedUsername = normalizeUsername(username);
+  return { ok: true, username, password, playerName };
+}
+
+function createRegisteredUser(
+  input: {
+    username: string;
+    password: string;
+    playerName: string;
+    gender: PlayerGender;
+  },
+  role: UserRole,
+): { ok: true } | { ok: false; error: string } {
+  const validated = validateRegistrationInput(input);
+  if (!validated.ok) {
+    return validated;
+  }
+
+  const normalizedUsername = normalizeUsername(validated.username);
   const users = getRegisteredUsers();
 
   if (users.some((user) => normalizeUsername(user.username) === normalizedUsername)) {
@@ -111,14 +159,37 @@ export function registerUser(input: {
   }
 
   users.push({
-    username,
-    password,
-    playerName,
+    username: validated.username,
+    password: validated.password,
+    playerName: validated.playerName,
     gender: input.gender,
+    role,
   });
 
   saveRegisteredUsers(users);
   return { ok: true };
+}
+
+export function registerUser(input: {
+  username: string;
+  password: string;
+  playerName: string;
+  gender: PlayerGender;
+}): { ok: true } | { ok: false; error: string } {
+  return createRegisteredUser(input, "user");
+}
+
+export function registerAdminUser(input: {
+  username: string;
+  password: string;
+  playerName: string;
+  gender: PlayerGender;
+}): { ok: true } | { ok: false; error: string } {
+  if (!isAdminRegisterUnlocked()) {
+    return { ok: false, error: "Admin registration is locked." };
+  }
+
+  return createRegisteredUser(input, "admin");
 }
 
 export function loginUser(
@@ -152,6 +223,48 @@ export function loginUser(
       username: matchedUser.username,
       playerName: matchedUser.playerName,
       gender: matchedUser.gender,
+      role: matchedUser.role,
     },
   };
+}
+
+export function removeRegisteredUser(
+  targetUsername: string,
+  actingUser: AuthUser,
+): { ok: true } | { ok: false; error: string } {
+  if (!isAdmin(actingUser)) {
+    return { ok: false, error: "Only admins can remove accounts." };
+  }
+
+  const normalizedTarget = normalizeUsername(targetUsername);
+  const normalizedActor = normalizeUsername(actingUser.username);
+
+  if (normalizedTarget === normalizedActor) {
+    return { ok: false, error: "You cannot remove your own account." };
+  }
+
+  const users = getRegisteredUsers();
+  const targetUser = users.find(
+    (user) => normalizeUsername(user.username) === normalizedTarget,
+  );
+
+  if (!targetUser) {
+    return { ok: false, error: "Account not found." };
+  }
+
+  const remainingAdmins = users.filter(
+    (user) =>
+      user.role === "admin" &&
+      normalizeUsername(user.username) !== normalizedTarget,
+  );
+
+  if (targetUser.role === "admin" && remainingAdmins.length === 0) {
+    return { ok: false, error: "Cannot remove the last admin account." };
+  }
+
+  saveRegisteredUsers(
+    users.filter((user) => normalizeUsername(user.username) !== normalizedTarget),
+  );
+
+  return { ok: true };
 }

@@ -3,20 +3,23 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getAuthUser, loginUser, setAuthUser } from "@/lib/auth";
+import { getAuthUser, loginUser, setAuthUser, unlockAdminRegister } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const justRegistered = searchParams.get("registered") === "1";
+  const adminRegistered = searchParams.get("adminRegistered") === "1";
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [dontClickCount, setDontClickCount] = useState(0);
 
   useEffect(() => {
-    if (getAuthUser()) {
+    const user = getAuthUser();
+    if (user) {
       router.replace("/");
       return;
     }
@@ -37,6 +40,16 @@ export default function LoginPage() {
     setIsSubmitting(true);
     setAuthUser(result.user);
     router.push("/");
+  }
+
+  function handleDontClick() {
+    const nextCount = dontClickCount + 1;
+    setDontClickCount(nextCount);
+
+    if (nextCount >= 5) {
+      unlockAdminRegister();
+      router.push("/admin/register");
+    }
   }
 
   if (isCheckingSession) {
@@ -62,6 +75,12 @@ export default function LoginPage() {
           {justRegistered && (
             <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
               Account created successfully. Sign in to continue.
+            </div>
+          )}
+
+          {adminRegistered && (
+            <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+              Admin account created successfully. Sign in to continue.
             </div>
           )}
 
@@ -106,7 +125,14 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-600">
-            Don&apos;t have an account?{" "}
+            <button
+              type="button"
+              onClick={handleDontClick}
+              className="cursor-default border-0 bg-transparent p-0 text-slate-600"
+            >
+              Don&apos;t
+            </button>{" "}
+            have an account?{" "}
             <Link href="/register" className="font-medium text-blue-600 hover:text-blue-700">
               Create one
             </Link>

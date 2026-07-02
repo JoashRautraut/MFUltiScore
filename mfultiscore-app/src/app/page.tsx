@@ -3,9 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { STAT_TYPES, StatType } from "@/types/stats";
-import { clearAuthUser, getAuthUser, getRegisteredPlayers, type AuthUser } from "@/lib/auth";
+import { clearAuthUser, getAuthUser, getRegisteredPlayers, isAdmin, type AuthUser } from "@/lib/auth";
 
 type Screen = "setup" | "live" | "summary" | "dashboard";
+
+const ADMIN_NAV_ITEMS: Array<[Screen, string]> = [
+  ["setup", "Setup"],
+  ["live", "Live Game"],
+  ["summary", "Summary"],
+  ["dashboard", "Dashboard"],
+];
+
+const USER_NAV_ITEMS: Array<[Screen, string]> = [
+  ["summary", "Summary"],
+  ["dashboard", "Dashboard"],
+];
 type TeamIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
 type TeamKey = `team${TeamIndex}`;
 type PlayerGender = "male" | "female";
@@ -225,6 +237,7 @@ export default function Home() {
     }
 
     setAuthUserState(user);
+    setScreen(isAdmin(user) ? "setup" : "summary");
 
     const registeredPlayers = getRegisteredPlayers();
     setPlayerAssignments((current) => {
@@ -244,6 +257,19 @@ export default function Home() {
 
     setIsAuthChecking(false);
   }, [router]);
+
+  const userIsAdmin = isAdmin(authUser);
+  const navItems = userIsAdmin ? ADMIN_NAV_ITEMS : USER_NAV_ITEMS;
+
+  useEffect(() => {
+    if (isAuthChecking || userIsAdmin) {
+      return;
+    }
+
+    if (screen === "setup" || screen === "live") {
+      setScreen("summary");
+    }
+  }, [isAuthChecking, userIsAdmin, screen]);
 
   function handleLogout() {
     clearAuthUser();
@@ -665,6 +691,15 @@ export default function Home() {
                   <span className="font-medium text-slate-900">{authUser?.playerName}</span>
                   <span className="text-slate-400"> · @{authUser?.username}</span>
                 </span>
+                {userIsAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/admin")}
+                    className="rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100"
+                  >
+                    Admin panel
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -675,12 +710,7 @@ export default function Home() {
               </div>
 
               <nav className="grid grid-cols-2 gap-2 sm:flex">
-              {[
-                ["setup", "Setup"],
-                ["live", "Live Game"],
-                ["summary", "Summary"],
-                ["dashboard", "Dashboard"],
-              ].map(([value, label]) => (
+              {navItems.map(([value, label]) => (
                 <button
                   key={value}
                   type="button"
@@ -699,7 +729,7 @@ export default function Home() {
           </div>
         </header>
 
-        {screen === "setup" && (
+        {userIsAdmin && screen === "setup" && (
           <section className="grid gap-4 xl:grid-cols-[1fr_1.7fr]">
             <div className="space-y-4">
               <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -919,7 +949,7 @@ export default function Home() {
           </section>
         )}
 
-        {screen === "live" && (
+        {userIsAdmin && screen === "live" && (
           <section className="space-y-4">
             <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
