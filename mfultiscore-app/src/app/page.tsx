@@ -824,8 +824,8 @@ export default function Home() {
                       <p className={`text-sm font-medium ${accent.label}`}>{option.label}</p>
                       <p className="mt-2 text-3xl font-semibold text-slate-900">
                         {teamSelections[option.key].length}
-                      </p>
-                    </div>
+          </p>
+        </div>
                   );
                 })}
               </div>
