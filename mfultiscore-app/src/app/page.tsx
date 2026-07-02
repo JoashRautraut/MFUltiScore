@@ -327,11 +327,6 @@ export default function Home() {
     );
   }, [allSetupPlayers, playerAssignments]);
 
-  const unassignedPlayers = useMemo(
-    () => allSetupPlayers.filter((player) => playerAssignments[player] === null),
-    [allSetupPlayers, playerAssignments],
-  );
-
   const filteredSetupPlayers = useMemo(() => {
     const query = playerSearch.trim().toLowerCase();
     if (!query) {
@@ -342,6 +337,22 @@ export default function Home() {
       player.toLowerCase().includes(query),
     );
   }, [allSetupPlayers, playerSearch]);
+
+  const filteredMalePlayers = useMemo(
+    () =>
+      filteredSetupPlayers.filter(
+        (player) => (playerGenders[player] ?? "male") === "male",
+      ),
+    [filteredSetupPlayers, playerGenders],
+  );
+
+  const filteredFemalePlayers = useMemo(
+    () =>
+      filteredSetupPlayers.filter(
+        (player) => playerGenders[player] === "female",
+      ),
+    [filteredSetupPlayers, playerGenders],
+  );
 
   const allActivePlayers = useMemo(
     () => flattenPlayers(teamPlayers),
@@ -594,6 +605,10 @@ export default function Home() {
   }
 
   function saveGame() {
+    if (!userIsAdmin) {
+      return;
+    }
+
     setCompletedGames((current) => [
       {
         id: Date.now(),
@@ -619,6 +634,60 @@ export default function Home() {
     ]);
 
     setScreen("summary");
+  }
+
+  function renderSetupPlayerRow(player: string) {
+    const assignment = playerAssignments[player];
+    const accent = assignment ? getTeamAccent(assignment) : null;
+
+    return (
+      <div
+        key={player}
+        className={`flex flex-col gap-3 rounded-2xl border p-4 md:flex-row md:items-center md:justify-between ${
+          accent ? `${accent.ring} ${accent.soft} border-2` : "border-slate-200 bg-white"
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          {accent && <span className={`h-10 w-1.5 rounded-full ${accent.strong}`} />}
+          <div>
+            <p className="font-medium text-slate-900">{player}</p>
+            <p className="text-sm text-slate-500">
+              {assignment === null
+                ? "No team assigned"
+                : `Assigned to ${getTeamLabel(assignment)}`}
+            </p>
+            {accent && assignment && (
+              <span
+                className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${accent.badge}`}
+              >
+                {getTeamLabel(assignment)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <label className="w-full md:w-44">
+          <span className="sr-only">Assign team for {player}</span>
+          <select
+            value={assignment ?? ""}
+            onChange={(event) => {
+              const value = event.target.value;
+              assignPlayer(player, value === "" ? null : (value as TeamKey));
+            }}
+            className={`w-full rounded-xl border bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-400 ${
+              accent ? accent.ring : "border-slate-200"
+            }`}
+          >
+            <option value="">No team</option>
+            {TEAM_OPTIONS.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    );
   }
 
   function renderPlayerCards(players: ActivePlayer[], team: TeamKey, label: string) {
@@ -912,26 +981,23 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-8 2xl:grid-cols-10">
-                <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="text-sm text-slate-500">No team</p>
-                  <p className="mt-2 text-3xl font-semibold">{unassignedPlayers.length}</p>
+              {TEAM_OPTIONS.some((option) => teamSelections[option.key].length > 0) && (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {TEAM_OPTIONS.filter((option) => teamSelections[option.key].length > 0).map(
+                    (option) => (
+                      <div
+                        key={option.key}
+                        className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"
+                      >
+                        <p className="text-sm text-slate-500">{option.label}</p>
+                        <p className="mt-2 text-3xl font-semibold text-slate-900">
+                          {teamSelections[option.key].length}
+                        </p>
+                      </div>
+                    ),
+                  )}
                 </div>
-                {TEAM_OPTIONS.map((option) => {
-                  const accent = getTeamAccent(option.key);
-                  return (
-                    <div
-                      key={option.key}
-                      className={`rounded-3xl border p-4 shadow-sm ${accent.ring} ${accent.soft}`}
-                    >
-                      <p className={`text-sm font-medium ${accent.label}`}>{option.label}</p>
-                      <p className="mt-2 text-3xl font-semibold text-slate-900">
-                        {teamSelections[option.key].length}
-          </p>
-        </div>
-                  );
-                })}
-              </div>
+              )}
 
               <button
                 type="button"
@@ -961,72 +1027,49 @@ export default function Home() {
                 </label>
               </div>
 
-              <div className="grid gap-3">
-                {filteredSetupPlayers.map((player) => {
-                  const assignment = playerAssignments[player];
-                  const accent = assignment ? getTeamAccent(assignment) : null;
-
-                  return (
-                    <div
-                      key={player}
-                      className={`flex flex-col gap-3 rounded-2xl border p-4 md:flex-row md:items-center md:justify-between ${
-                        accent
-                          ? `${accent.ring} ${accent.soft} border-2`
-                          : "border-slate-200 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {accent && (
-                          <span className={`h-10 w-1.5 rounded-full ${accent.strong}`} />
-                        )}
-                        <div>
-                          <p className="font-medium text-slate-900">{player}</p>
-                          <p className="text-sm text-slate-500">
-                            {assignment === null
-                              ? "No team assigned"
-                              : `Assigned to ${getTeamLabel(assignment)}`}
-                          </p>
-                          {accent && assignment && (
-                            <span className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${accent.badge}`}>
-                              {getTeamLabel(assignment)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <label className="w-full md:w-44">
-                        <span className="sr-only">Assign team for {player}</span>
-                        <select
-                          value={assignment ?? ""}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            assignPlayer(
-                              player,
-                              value === "" ? null : (value as TeamKey),
-                            );
-                          }}
-                          className={`w-full rounded-xl border bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-400 ${
-                            accent ? accent.ring : "border-slate-200"
-                          }`}
-                        >
-                          <option value="">No team</option>
-                          {TEAM_OPTIONS.map((option) => (
-                            <option key={option.key} value={option.key}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  );
-                })}
-
-                {filteredSetupPlayers.length === 0 && (
+              <div className="space-y-6">
+                {filteredSetupPlayers.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                     {playerSearch.trim()
                       ? "No players match your search."
                       : "No registered players yet. Create an account to be added as a player."}
                   </div>
+                ) : (
+                  <>
+                    <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-blue-900">Male players</h3>
+                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                          {filteredMalePlayers.length}
+                        </span>
+                      </div>
+                      <div className="grid gap-3">
+                        {filteredMalePlayers.map((player) => renderSetupPlayerRow(player))}
+                        {filteredMalePlayers.length === 0 && (
+                          <div className="rounded-2xl border border-dashed border-blue-200 bg-white p-4 text-sm text-slate-500">
+                            No male players match your search.
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="rounded-2xl border border-pink-200 bg-pink-50/40 p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-pink-900">Female players</h3>
+                        <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-medium text-pink-800">
+                          {filteredFemalePlayers.length}
+                        </span>
+                      </div>
+                      <div className="grid gap-3">
+                        {filteredFemalePlayers.map((player) => renderSetupPlayerRow(player))}
+                        {filteredFemalePlayers.length === 0 && (
+                          <div className="rounded-2xl border border-dashed border-pink-200 bg-white p-4 text-sm text-slate-500">
+                            No female players match your search.
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  </>
                 )}
               </div>
             </div>
@@ -1127,85 +1170,99 @@ export default function Home() {
 
         {screen === "summary" && (
           <section className="space-y-4">
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-sm font-medium text-slate-500">Step 3</p>
-              <h2 className="mt-1 text-2xl font-semibold text-slate-900">Review before saving</h2>
-              <p className="mt-2 text-sm text-slate-600">
-                Check the totals, confirm the timer, and save the game to the dashboard.
-              </p>
-            </div>
+            {userIsAdmin ? (
+              <>
+                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-sm font-medium text-slate-500">Step 3</p>
+                  <h2 className="mt-1 text-2xl font-semibold text-slate-900">Review before saving</h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Check the totals, confirm the timer, and save the game to the dashboard.
+                  </p>
+                </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-slate-500">Date</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-900">{date}</p>
-              </div>
-              <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-slate-500">Game length</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-900">{formatTime(elapsedSeconds)}</p>
-              </div>
-              <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-slate-500">MPV</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-900">
-                  {bestPlayerToday.name} ({bestPlayerToday.percentage}%)
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-sm text-slate-500">Date</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{date}</p>
+                  </div>
+                  <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-sm text-slate-500">Game length</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{formatTime(elapsedSeconds)}</p>
+                  </div>
+                  <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p className="text-sm text-slate-500">MPV</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                      {bestPlayerToday.name} ({bestPlayerToday.percentage}%)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-600">
+                      <tr>
+                        <th className="px-4 py-3">Player</th>
+                        <th className="px-4 py-3">Team</th>
+                        <th className="px-4 py-3">Block</th>
+                        <th className="px-4 py-3">Assist</th>
+                        <th className="px-4 py-3">Score</th>
+                        <th className="px-4 py-3">Callahan</th>
+                        <th className="px-4 py-3">Points</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allActivePlayers.map((player) => (
+                        <tr key={`${player.team}-${player.name}`} className="border-t border-slate-200">
+                          <td className="px-4 py-3 font-medium text-slate-900">{player.name}</td>
+                          <td className="px-4 py-3 text-slate-600">{getTeamLabel(player.team)}</td>
+                          <td className="px-4 py-3">{player.counts.Block}</td>
+                          <td className="px-4 py-3">{player.counts.Assist}</td>
+                          <td className="px-4 py-3">{player.counts.Score}</td>
+                          <td className="px-4 py-3">{player.counts.Callahan}</td>
+                          <td className="px-4 py-3">{playerPoints(player.counts)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimerRunning(timerSeconds > 0);
+                      setScreen("live");
+                    }}
+                    className="rounded-2xl bg-slate-100 px-5 py-3 font-medium text-slate-900"
+                  >
+                    Back to live game
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveGame}
+                    className="rounded-2xl bg-blue-600 px-5 py-3 font-medium text-white"
+                  >
+                    Save summary record
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-sm font-medium text-slate-500">Summary</p>
+                <h2 className="mt-1 text-2xl font-semibold text-slate-900">Game summary records</h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  View saved game results below. Only admins can save new summary records.
                 </p>
               </div>
-            </div>
-
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3">Player</th>
-                    <th className="px-4 py-3">Team</th>
-                    <th className="px-4 py-3">Block</th>
-                    <th className="px-4 py-3">Assist</th>
-                    <th className="px-4 py-3">Score</th>
-                    <th className="px-4 py-3">Callahan</th>
-                    <th className="px-4 py-3">Points</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allActivePlayers.map((player) => (
-                    <tr key={`${player.team}-${player.name}`} className="border-t border-slate-200">
-                      <td className="px-4 py-3 font-medium text-slate-900">{player.name}</td>
-                      <td className="px-4 py-3 text-slate-600">{getTeamLabel(player.team)}</td>
-                      <td className="px-4 py-3">{player.counts.Block}</td>
-                      <td className="px-4 py-3">{player.counts.Assist}</td>
-                      <td className="px-4 py-3">{player.counts.Score}</td>
-                      <td className="px-4 py-3">{player.counts.Callahan}</td>
-                      <td className="px-4 py-3">{playerPoints(player.counts)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => {
-                  setTimerRunning(timerSeconds > 0);
-                  setScreen("live");
-                }}
-                className="rounded-2xl bg-slate-100 px-5 py-3 font-medium text-slate-900"
-              >
-                Back to live game
-              </button>
-              <button
-                type="button"
-                onClick={saveGame}
-                className="rounded-2xl bg-blue-600 px-5 py-3 font-medium text-white"
-              >
-                Save summary record
-              </button>
-            </div>
+            )}
 
             <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-200 px-5 py-4">
                 <h3 className="text-lg font-semibold text-slate-900">Summary records</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Saved game summaries stay visible here and new games are added to this list.
+                  {userIsAdmin
+                    ? "Saved game summaries stay visible here and new games are added to this list."
+                    : "Browse saved game summaries in read-only mode."}
                 </p>
               </div>
               <div className="divide-y divide-slate-200">
