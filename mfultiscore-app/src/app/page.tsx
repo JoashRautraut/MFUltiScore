@@ -101,6 +101,17 @@ function getTeamLabel(team: TeamKey) {
   return TEAM_OPTIONS.find((option) => option.key === team)?.label ?? team;
 }
 
+function getTeamAccent(team: TeamKey) {
+  const accents: Record<TeamKey, { soft: string; strong: string; ring: string }> = {
+    team1: { soft: "bg-blue-50", strong: "bg-blue-600", ring: "border-blue-200" },
+    team2: { soft: "bg-emerald-50", strong: "bg-emerald-600", ring: "border-emerald-200" },
+    team3: { soft: "bg-amber-50", strong: "bg-amber-500", ring: "border-amber-200" },
+    team4: { soft: "bg-violet-50", strong: "bg-violet-600", ring: "border-violet-200" },
+    team5: { soft: "bg-rose-50", strong: "bg-rose-600", ring: "border-rose-200" },
+  };
+  return accents[team];
+}
+
 function totalCounts(counts: Record<StatType, number>) {
   return STAT_TYPES.reduce((sum, statType) => sum + counts[statType], 0);
 }
@@ -394,14 +405,15 @@ export default function Home() {
   }
 
   function renderPlayerCards(players: ActivePlayer[], team: TeamKey, label: string) {
+    const accent = getTeamAccent(team);
     return (
-      <section className="space-y-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className={`space-y-3 rounded-3xl border p-4 shadow-sm ${accent.ring} ${accent.soft}`}>
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-900">{label}</h3>
             <p className="text-sm text-slate-500">{players.length} active players</p>
           </div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+          <span className={`rounded-full px-3 py-1 text-sm font-medium text-white ${accent.strong}`}>
             {label}
           </span>
         </div>
@@ -429,7 +441,7 @@ export default function Home() {
                     key={statType}
                     type="button"
                     onClick={() => addStat(player.name, team, statType)}
-                    className="rounded-2xl bg-slate-900 px-4 py-4 text-left text-white transition hover:bg-slate-800"
+                    className={`rounded-2xl px-4 py-4 text-left text-white transition hover:opacity-90 ${accent.strong}`}
                   >
                     <span className="block text-sm text-slate-300">{statType}</span>
                     <span className="mt-1 block text-2xl font-semibold">{player.counts[statType]}</span>
@@ -444,16 +456,16 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6">
+    <main className="min-h-screen bg-gray-100 px-4 py-6 text-slate-900 sm:px-6">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="rounded-3xl bg-slate-900 px-6 py-6 text-white shadow-sm">
+        <header className="rounded-3xl bg-white px-6 py-6 text-slate-900 shadow-sm border border-slate-200">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-700">
                 Ultimate Frisbee Stat Tracker
               </p>
               <h1 className="mt-2 text-3xl font-semibold">MFULTISCORE</h1>
-              <p className="mt-2 max-w-2xl text-sm text-slate-300">
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
                 Clean scorekeeping flow: assign players to up to five teams, track stats live, review the game,
                 and keep saved results on the dashboard.
               </p>
@@ -472,8 +484,8 @@ export default function Home() {
                   onClick={() => setScreen(value as Screen)}
                   className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                     screen === value
-                      ? "bg-white text-slate-900"
-                      : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                   }`}
                 >
                   {label}
@@ -594,8 +606,8 @@ export default function Home() {
                     <p className="text-sm text-slate-500">{option.label}</p>
                     <p className="mt-2 text-3xl font-semibold">
                       {teamSelections[option.key].length}
-                    </p>
-                  </div>
+          </p>
+        </div>
                 ))}
               </div>
 
@@ -603,7 +615,7 @@ export default function Home() {
                 type="button"
                 onClick={startMockGame}
                 disabled={matchup.home === matchup.away}
-                className="w-full rounded-3xl bg-slate-900 px-5 py-4 text-lg font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="w-full rounded-3xl bg-blue-600 px-5 py-4 text-lg font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 Start live scoring
               </button>
@@ -702,7 +714,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setTimerRunning((current) => !current)}
-                    className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white"
+                    className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white"
                   >
                     {timerRunning ? "Pause" : "Resume"}
                   </button>
@@ -841,7 +853,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={saveGame}
-                className="rounded-2xl bg-slate-900 px-5 py-3 font-medium text-white"
+                className="rounded-2xl bg-blue-600 px-5 py-3 font-medium text-white"
               >
                 Save to dashboard
               </button>
@@ -923,7 +935,7 @@ export default function Home() {
             </div>
           </section>
         )}
-      </div>
-    </main>
+        </div>
+      </main>
   );
 }
