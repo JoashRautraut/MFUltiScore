@@ -984,17 +984,20 @@ export default function Home() {
               {TEAM_OPTIONS.some((option) => teamSelections[option.key].length > 0) && (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {TEAM_OPTIONS.filter((option) => teamSelections[option.key].length > 0).map(
-                    (option) => (
-                      <div
-                        key={option.key}
-                        className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"
-                      >
-                        <p className="text-sm text-slate-500">{option.label}</p>
-                        <p className="mt-2 text-3xl font-semibold text-slate-900">
-                          {teamSelections[option.key].length}
-                        </p>
-                      </div>
-                    ),
+                    (option) => {
+                      const accent = getTeamAccent(option.key);
+                      return (
+                        <div
+                          key={option.key}
+                          className={`rounded-3xl border p-4 shadow-sm ${accent.ring} ${accent.soft}`}
+                        >
+                          <p className={`text-sm font-medium ${accent.label}`}>{option.label}</p>
+                          <p className="mt-2 text-3xl font-semibold text-slate-900">
+                            {teamSelections[option.key].length}
+                          </p>
+                        </div>
+                      );
+                    },
                   )}
                 </div>
               )}
