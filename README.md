@@ -1,72 +1,58 @@
-# MFUltiScore
+# MFULTISCORE (Ultimate Frisbee Stats)
 
-Ultimate Frisbee stat tracking app.
+Next.js + TypeScript app for tracking per-game player actions and building trends over time.
 
-**Live app:** https://joashrautraut.github.io/MFUltiScore/
+## Step 1-2 Status
 
----
+Completed:
+- Next.js App Router scaffold
+- Google Sheets API service-account integration
+- Server-side helper functions:
+  - `appendStat()`
+  - `getPlayers()`
+  - `addPlayer()`
+  - `createGame()`
+  - `getGameStats(gameId)`
+  - `getAllStats()`
+- API routes that call those helpers (client never talks to Sheets directly)
 
-## Deploy to GitHub Pages (MFUS-1.0 branch)
+## Required Google Sheet tabs
 
-### Step 1 — One-time GitHub settings
+Use one spreadsheet with these exact tab names and columns:
 
-1. Open **Settings → Actions → General**
-2. Under **Workflow permissions**, choose **Read and write permissions**
-3. Click **Save**
+- `Players`: `PlayerID`, `Name`, `DateAdded`
+- `Games`: `GameID`, `Date`, `Opponent`, `Location`
+- `Stats`: `StatID`, `GameID`, `PlayerName`, `StatType`, `Timestamp`
 
-4. Open **Settings → Pages**
-5. Under **Build and deployment**, set **Source** to **GitHub Actions**  
-   (Do **not** use "Deploy from a branch → main")
+Allowed `StatType` values:
+- `Block`
+- `Assist`
+- `Score`
+- `Callahan`
 
-### Step 2 — Push your code
+## Environment setup
 
-```bash
-git add .
-git commit -m "Fix GitHub Pages deployment"
-git push origin MFUS-1.0
-```
+1. Copy `.env.example` to `.env.local`
+2. Set these values:
+   - `GOOGLE_SERVICE_ACCOUNT_EMAIL`
+   - `GOOGLE_PRIVATE_KEY`
+   - `GOOGLE_SPREADSHEET_ID`
+3. Share your spreadsheet with the service-account email as Editor
 
-### Step 3 — Check the workflow
-
-1. Open the **Actions** tab
-2. Open **Deploy to GitHub Pages** (not only "pages build and deployment")
-3. Wait for a green checkmark on both **build** and **deploy**
-
-### Step 4 — Open the site
-
-https://joashrautraut.github.io/MFUltiScore/
-
-Hard refresh: `Ctrl + F5`
-
----
-
-## If deployment fails
-
-Click the failed run → open the red step → read the error message.
-
-Common fixes:
-- Enable **Read and write** workflow permissions (Step 1 above)
-- Make sure **Pages source** is **GitHub Actions**
-- Push from `MFUS-1.0` (this branch is supported)
-
----
-
-## Local development
+## Run locally
 
 ```bash
-cd mfultiscore-app
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000
+Then open [http://localhost:3000](http://localhost:3000).
 
-## Local build test
+## API routes
 
-```bash
-cd mfultiscore-app
-npm install
-npm run build:github
-```
-
-Built files are in `mfultiscore-app/out`.
+- `GET /api/players`
+- `POST /api/players` with `{ "name": "Player Name" }`
+- `GET /api/games`
+- `POST /api/games` with `{ "date": "2026-07-02", "opponent": "Team", "location": "Field 1" }`
+- `GET /api/stats` (or `GET /api/stats?gameId=...`)
+- `POST /api/stats` with `{ "gameId": "...", "playerName": "...", "statType": "Score" }`
