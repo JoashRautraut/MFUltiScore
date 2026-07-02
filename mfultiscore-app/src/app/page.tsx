@@ -428,7 +428,7 @@ export default function Home() {
       ...current,
     ]);
 
-    setScreen("dashboard");
+    setScreen("summary");
   }
 
   function renderPlayerCards(players: ActivePlayer[], team: TeamKey, label: string) {
@@ -820,7 +820,7 @@ export default function Home() {
                 </section>
 
                 <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <h3 className="text-lg font-semibold text-slate-900">Best player today</h3>
+                  <h3 className="text-lg font-semibold text-slate-900">MPV today</h3>
                   <p className="mt-3 text-3xl font-semibold text-slate-900">
                     {bestPlayerToday.name}
                   </p>
@@ -853,7 +853,7 @@ export default function Home() {
                 <p className="mt-2 text-2xl font-semibold text-slate-900">{formatTime(elapsedSeconds)}</p>
               </div>
               <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                <p className="text-sm text-slate-500">Best player</p>
+                <p className="text-sm text-slate-500">MPV</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-900">
                   {bestPlayerToday.name} ({bestPlayerToday.percentage}%)
                 </p>
@@ -905,8 +905,76 @@ export default function Home() {
                 onClick={saveGame}
                 className="rounded-2xl bg-blue-600 px-5 py-3 font-medium text-white"
               >
-                Save to dashboard
+                Save summary record
               </button>
+            </div>
+
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 px-5 py-4">
+                <h3 className="text-lg font-semibold text-slate-900">Summary records</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Saved game summaries stay visible here and new games are added to this list.
+                </p>
+              </div>
+              <div className="divide-y divide-slate-200">
+                {completedGames.map((game) => (
+                  <details key={game.id} className="group px-5 py-4" open>
+                    <summary className="grid cursor-pointer list-none gap-4 md:grid-cols-4">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Date</p>
+                        <p className="mt-1 font-medium text-slate-900">{game.date}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Ended</p>
+                        <p className="mt-1 font-medium text-slate-900">{game.endedAt}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Length</p>
+                        <p className="mt-1 font-medium text-slate-900">{formatTime(game.timerSeconds)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">MPV</p>
+                        <p className="mt-1 font-medium text-slate-900">
+                          {game.bestPlayer.name} ({game.bestPlayer.percentage}%) ·{" "}
+                          {getTeamLabel(game.bestPlayer.team)}
+                        </p>
+                      </div>
+                    </summary>
+
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="bg-slate-100 text-slate-600">
+                          <tr>
+                            <th className="px-4 py-3">Player</th>
+                            <th className="px-4 py-3">Team</th>
+                            <th className="px-4 py-3">Block</th>
+                            <th className="px-4 py-3">Assist</th>
+                            <th className="px-4 py-3">Score</th>
+                            <th className="px-4 py-3">Callahan</th>
+                            <th className="px-4 py-3">Points</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {flattenPlayers(game.teamPlayers).map((player) => (
+                            <tr
+                              key={`${game.id}-${player.team}-${player.name}`}
+                              className="border-t border-slate-200 bg-white"
+                            >
+                              <td className="px-4 py-3 font-medium text-slate-900">{player.name}</td>
+                              <td className="px-4 py-3 text-slate-600">{getTeamLabel(player.team)}</td>
+                              <td className="px-4 py-3">{player.counts.Block}</td>
+                              <td className="px-4 py-3">{player.counts.Assist}</td>
+                              <td className="px-4 py-3">{player.counts.Score}</td>
+                              <td className="px-4 py-3">{player.counts.Callahan}</td>
+                              <td className="px-4 py-3">{playerPoints(player.counts)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                ))}
+              </div>
             </div>
           </section>
         )}
@@ -942,7 +1010,7 @@ export default function Home() {
                       <p className="mt-1 font-semibold text-slate-900">{player.games}</p>
                     </div>
                     <div className="rounded-2xl bg-slate-50 p-3">
-                      <p className="text-slate-500">Best player</p>
+                      <p className="text-slate-500">MPV</p>
                       <p className="mt-1 font-semibold text-slate-900">{player.bestPlayerWins}x</p>
                     </div>
                     <div className="rounded-2xl bg-slate-50 p-3">
@@ -974,7 +1042,7 @@ export default function Home() {
                       <p className="mt-1 font-medium text-slate-900">{formatTime(game.timerSeconds)}</p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Best player</p>
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">MPV</p>
                       <p className="mt-1 font-medium text-slate-900">
                         {game.bestPlayer.name} ({game.bestPlayer.percentage}%) · {getTeamLabel(game.bestPlayer.team)}
                       </p>
