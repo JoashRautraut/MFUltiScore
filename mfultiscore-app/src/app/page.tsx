@@ -152,6 +152,7 @@ function getBestPlayer(teamPlayers: Record<TeamKey, ActivePlayer[]>) {
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("setup");
   const [date, setDate] = useState("2026-07-02");
+  const [gameDurationMinutes, setGameDurationMinutes] = useState(20);
   const [quickAddName, setQuickAddName] = useState("");
   const [playerSearch, setPlayerSearch] = useState("");
   const [matchup, setMatchup] = useState<{ home: TeamKey; away: TeamKey }>({
@@ -174,17 +175,30 @@ export default function Home() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [completedGames, setCompletedGames] = useState<CompletedGame[]>(initialCompletedGames);
 
+  const configuredDurationSeconds = useMemo(
+    () => Math.max(gameDurationMinutes, 1) * 60,
+    [gameDurationMinutes],
+  );
+
   useEffect(() => {
-    if (!timerRunning) {
+    if (!timerRunning || timerSeconds <= 0) {
       return;
     }
 
     const interval = window.setInterval(() => {
-      setTimerSeconds((current) => current + 1);
+      setTimerSeconds((current) => {
+        if (current <= 1) {
+          window.clearInterval(interval);
+          setTimerRunning(false);
+          return 0;
+        }
+
+        return current - 1;
+      });
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [timerRunning]);
+  }, [timerRunning, timerSeconds]);
 
   const allSetupPlayers = useMemo(
     () => Object.keys(playerAssignments).sort((a, b) => a.localeCompare(b)),
@@ -235,6 +249,19 @@ export default function Home() {
       away: teamPlayers[matchup.away],
     }),
     [matchup, teamPlayers],
+  );
+
+  const matchupScore = useMemo(
+    () => ({
+      home: matchupPlayers.home.reduce((sum, player) => sum + player.counts.Score, 0),
+      away: matchupPlayers.away.reduce((sum, player) => sum + player.counts.Score, 0),
+    }),
+    [matchupPlayers],
+  );
+
+  const elapsedSeconds = useMemo(
+    () => Math.max(configuredDurationSeconds - timerSeconds, 0),
+    [configuredDurationSeconds, timerSeconds],
   );
 
   const bestPlayerToday = useMemo(
@@ -313,7 +340,7 @@ export default function Home() {
     }
     setTeamPlayers(nextTeamPlayers);
     setLogEntries([]);
-    setTimerSeconds(0);
+    setTimerSeconds(configuredDurationSeconds);
     setTimerRunning(true);
     setScreen("live");
   }
@@ -346,7 +373,7 @@ export default function Home() {
         playerName,
         team,
         statType,
-        timestampLabel: formatTime(timerSeconds),
+        timestampLabel: formatTime(elapsedSeconds),
       },
       ...current,
     ]);
@@ -388,7 +415,7 @@ export default function Home() {
         id: Date.now(),
         date,
         endedAt: formatClockTime(new Date()),
-        timerSeconds,
+        timerSeconds: elapsedSeconds,
         teamPlayers,
         bestPlayer: getBestPlayer({
           team1: matchup.home === "team1" || matchup.away === "team1" ? teamPlayers.team1 : [],
@@ -516,6 +543,26 @@ export default function Home() {
                     className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                   />
                 </label>
+
+                <div className="mt-4">
+                  <label className="block">
+                    <span className="text-sm font-medium text-slate-600">Match timer (minutes)</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={180}
+                      value={gameDurationMinutes}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (Number.isNaN(value)) {
+                          return;
+                        }
+                        setGameDurationMinutes(Math.min(180, Math.max(1, value)));
+                      }}
+                      className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
+                    />
+                  </label>
+                </div>
 
                 <div className="mt-4">
                   <span className="text-sm font-medium text-slate-600">Quick add player</span>
@@ -704,11 +751,14 @@ export default function Home() {
                     {getTeamLabel(matchup.home)} vs {getTeamLabel(matchup.away)}
                   </h2>
                   <p className="mt-1 text-sm text-slate-600">{date}</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-800">
+                    Score: {matchupScore.home} - {matchupScore.away}
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   <div className="rounded-2xl border border-slate-200 px-4 py-3 text-center">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Timer</p>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Time left</p>
                     <p className="text-2xl font-semibold text-slate-900">{formatTime(timerSeconds)}</p>
                   </div>
                   <button
@@ -800,7 +850,7 @@ export default function Home() {
               </div>
               <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="text-sm text-slate-500">Game length</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-900">{formatTime(timerSeconds)}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-900">{formatTime(elapsedSeconds)}</p>
               </div>
               <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="text-sm text-slate-500">Best player</p>
@@ -843,7 +893,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => {
-                  setTimerRunning(true);
+                  setTimerRunning(timerSeconds > 0);
                   setScreen("live");
                 }}
                 className="rounded-2xl bg-slate-100 px-5 py-3 font-medium text-slate-900"
