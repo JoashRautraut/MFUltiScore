@@ -8,10 +8,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,18 +26,35 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: mfultiscore-app/package-lock.json
 
-      - name: Install and build
+      - name: Install dependencies
         working-directory: mfultiscore-app
-        run: |
-          npm ci
-          npm run build:github
+        run: npm ci
 
-      - name: Deploy built app to gh-pages branch
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Build static site
+        working-directory: mfultiscore-app
+        run: npm run build:github
+        env:
+          GITHUB_PAGES: "true"
+
+      - name: Verify build output
+        run: ls -la mfultiscore-app/out
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: mfultiscore-app/out
+          path: mfultiscore-app/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

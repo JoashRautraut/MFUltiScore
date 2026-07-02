@@ -7,15 +7,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, "..");
 const apiDir = path.join(appRoot, "src", "app", "api");
 const apiBackupDir = path.join(appRoot, "src", "app", "_api_backup");
+const nextDir = path.join(appRoot, ".next");
 
-function run(command, args, env = {}) {
-  const result = spawnSync(command, args, {
+function runBuild() {
+  const result = spawnSync("npm run build", {
     cwd: appRoot,
     stdio: "inherit",
     shell: true,
     env: {
       ...process.env,
-      ...env,
+      GITHUB_PAGES: "true",
     },
   });
 
@@ -54,8 +55,12 @@ function restoreApiRoutes() {
 let apiHidden = false;
 
 try {
+  if (existsSync(nextDir)) {
+    rmSync(nextDir, { recursive: true, force: true });
+  }
+
   apiHidden = hideApiRoutes();
-  run("npm", ["run", "build"], { GITHUB_PAGES: "true" });
+  runBuild();
 } finally {
   if (apiHidden) {
     restoreApiRoutes();

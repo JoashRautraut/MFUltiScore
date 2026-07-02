@@ -6,12 +6,19 @@ Ultimate Frisbee stat tracking app.
 
 ---
 
-## Fix GitHub Pages (if you only see this README)
+## Deploy to GitHub Pages (MFUS-1.0 branch)
 
-GitHub is showing this file because Pages is pointed at the **main** branch.  
-The real app must be deployed from the **gh-pages** branch.
+### Step 1 — One-time GitHub settings
 
-### Step 1 — Push your latest code
+1. Open **Settings → Actions → General**
+2. Under **Workflow permissions**, choose **Read and write permissions**
+3. Click **Save**
+
+4. Open **Settings → Pages**
+5. Under **Build and deployment**, set **Source** to **GitHub Actions**  
+   (Do **not** use "Deploy from a branch → main")
+
+### Step 2 — Push your code
 
 ```bash
 git add .
@@ -19,37 +26,28 @@ git commit -m "Fix GitHub Pages deployment"
 git push origin MFUS-1.0
 ```
 
-Also merge to `main` when ready:
+### Step 3 — Check the workflow
 
-```bash
-git checkout main
-git merge MFUS-1.0
-git push origin main
-```
+1. Open the **Actions** tab
+2. Open **Deploy to GitHub Pages** (not only "pages build and deployment")
+3. Wait for a green checkmark on both **build** and **deploy**
 
-### Step 2 — Wait for GitHub Actions
+### Step 4 — Open the site
 
-1. Open your repo on GitHub
-2. Click the **Actions** tab
-3. Open **Deploy to GitHub Pages**
-4. Wait until it shows a green checkmark
+https://joashrautraut.github.io/MFUltiScore/
 
-This workflow builds `mfultiscore-app` and publishes the `out` folder to the **gh-pages** branch.
+Hard refresh: `Ctrl + F5`
 
-### Step 3 — Change Pages settings (important)
+---
 
-1. Go to **Settings → Pages**
-2. Under **Build and deployment**
-3. Set **Source** to **Deploy from a branch**
-4. Set **Branch** to **gh-pages** (not `main`)
-5. Set folder to **/ (root)**
-6. Click **Save**
+## If deployment fails
 
-### Step 4 — Open the app
+Click the failed run → open the red step → read the error message.
 
-Visit: https://joashrautraut.github.io/MFUltiScore/
-
-Hard refresh if needed: `Ctrl + F5`
+Common fixes:
+- Enable **Read and write** workflow permissions (Step 1 above)
+- Make sure **Pages source** is **GitHub Actions**
+- Push from `MFUS-1.0` (this branch is supported)
 
 ---
 
@@ -63,7 +61,7 @@ npm run dev
 
 Open http://localhost:3000
 
-## Local build test (same as GitHub deploy)
+## Local build test
 
 ```bash
 cd mfultiscore-app
