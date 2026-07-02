@@ -6,6 +6,16 @@ import { STAT_TYPES, StatType } from "@/types/stats";
 type Screen = "setup" | "live" | "summary" | "dashboard";
 type TeamIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
 type TeamKey = `team${TeamIndex}`;
+type PlayerGender = "male" | "female";
+
+type DashboardPlayer = {
+  name: string;
+  gender: PlayerGender;
+  points: number;
+  games: number;
+  bestPlayerWins: number;
+  topPercentage: number;
+};
 
 type ActivePlayer = {
   name: string;
@@ -175,6 +185,7 @@ export default function Home() {
   const [date, setDate] = useState("2026-07-02");
   const [gameDurationMinutes, setGameDurationMinutes] = useState(20);
   const [quickAddName, setQuickAddName] = useState("");
+  const [quickAddGender, setQuickAddGender] = useState<PlayerGender>("male");
   const [playerSearch, setPlayerSearch] = useState("");
   const [matchup, setMatchup] = useState<{ home: TeamKey; away: TeamKey }>({
     home: "team1",
@@ -189,6 +200,16 @@ export default function Home() {
     Zoe: null,
     Eli: null,
     Jade: null,
+  });
+  const [playerGenders, setPlayerGenders] = useState<Record<string, PlayerGender>>({
+    Ava: "female",
+    Mia: "female",
+    Noah: "male",
+    Kai: "male",
+    Liam: "male",
+    Zoe: "female",
+    Eli: "male",
+    Jade: "female",
   });
   const [teamPlayers, setTeamPlayers] = useState<Record<TeamKey, ActivePlayer[]>>(createEmptyTeamPlayers());
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
@@ -303,15 +324,13 @@ export default function Home() {
   );
 
   const dashboardPlayers = useMemo(() => {
-    const totals = new Map<
-      string,
-      { name: string; points: number; games: number; bestPlayerWins: number; topPercentage: number }
-    >();
+    const totals = new Map<string, DashboardPlayer>();
 
     for (const game of completedGames) {
       for (const player of flattenPlayers(game.teamPlayers)) {
         const current = totals.get(player.name) ?? {
           name: player.name,
+          gender: playerGenders[player.name] ?? "male",
           points: 0,
           games: 0,
           bestPlayerWins: 0,
@@ -330,23 +349,46 @@ export default function Home() {
       }
     }
 
+    for (const playerName of allSetupPlayers) {
+      if (!totals.has(playerName)) {
+        totals.set(playerName, {
+          name: playerName,
+          gender: playerGenders[playerName] ?? "male",
+          points: 0,
+          games: 0,
+          bestPlayerWins: 0,
+          topPercentage: 0,
+        });
+      }
+    }
+
     return [...totals.values()].sort((a, b) => b.points - a.points);
-  }, [completedGames]);
+  }, [allSetupPlayers, completedGames, playerGenders]);
 
-  const bestOverallPlayer = useMemo(
-    () => dashboardPlayers[0] ?? null,
+  const maleRanking = useMemo(
+    () => dashboardPlayers.filter((player) => player.gender === "male"),
     [dashboardPlayers],
   );
 
-  const dashboardMaxPoints = useMemo(
-    () => dashboardPlayers[0]?.points ?? 1,
+  const femaleRanking = useMemo(
+    () => dashboardPlayers.filter((player) => player.gender === "female"),
     [dashboardPlayers],
   );
+
+  const bestMalePlayer = useMemo(() => maleRanking[0] ?? null, [maleRanking]);
+  const bestFemalePlayer = useMemo(() => femaleRanking[0] ?? null, [femaleRanking]);
 
   function assignPlayer(name: string, team: TeamKey | null) {
     setPlayerAssignments((current) => ({
       ...current,
       [name]: team,
+    }));
+  }
+
+  function assignPlayerGender(name: string, gender: PlayerGender) {
+    setPlayerGenders((current) => ({
+      ...current,
+      [name]: gender,
     }));
   }
 
@@ -362,6 +404,15 @@ export default function Home() {
         : {
             ...current,
             [normalized]: null,
+          },
+    );
+
+    setPlayerGenders((current) =>
+      current[normalized] !== undefined
+        ? current
+        : {
+            ...current,
+            [normalized]: quickAddGender,
           },
     );
 
@@ -523,6 +574,72 @@ export default function Home() {
     );
   }
 
+  function renderBestPlayerCard(player: DashboardPlayer | null, accentClass: string) {
+    if (!player) {
+      return <p className="mt-3 text-sm text-slate-500">No records yet.</p>;
+    }
+
+    return (
+      <div className="mt-3 grid gap-3 sm:grid-cols-4">
+        <div className={`rounded-2xl p-4 ${accentClass}`}>
+          <p className="text-sm text-slate-500">Player</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{player.name}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <p className="text-sm text-slate-500">Total points</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{player.points}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <p className="text-sm text-slate-500">MPV wins</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{player.bestPlayerWins}</p>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-4">
+          <p className="text-sm text-slate-500">Top contribution</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{player.topPercentage}%</p>
+        </div>
+      </div>
+    );
+  }
+
+  function renderRankingList(players: DashboardPlayer[], barColorClass: string) {
+    const maxPoints = players[0]?.points ?? 1;
+
+    if (players.length === 0) {
+      return (
+        <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+          No players in this category yet.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {players.map((player, index) => {
+          const widthPercent = Math.max(4, Math.round((player.points / maxPoints) * 100));
+          return (
+            <div key={player.name} className="grid grid-cols-[56px_140px_1fr_auto] items-center gap-3">
+              <div className="rounded-xl bg-slate-100 px-2 py-2 text-center text-sm font-semibold text-slate-700">
+                #{index + 1}
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium text-slate-900">{player.name}</p>
+              </div>
+              <div className="h-6 rounded-full bg-slate-100 p-1">
+                <div
+                  className={`h-full rounded-full ${barColorClass}`}
+                  style={{ width: `${widthPercent}%` }}
+                />
+              </div>
+              <div className="whitespace-nowrap text-sm font-semibold text-slate-700">
+                {player.points} pts
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-gray-100 px-4 py-6 text-slate-900 sm:px-6">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -614,6 +731,14 @@ export default function Home() {
                       placeholder="Type a new player name"
                       className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     />
+                    <select
+                      value={quickAddGender}
+                      onChange={(event) => setQuickAddGender(event.target.value as PlayerGender)}
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400 sm:w-36"
+                    >
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                    </select>
                     <button
                       type="button"
                       onClick={quickAddPlayer}
@@ -741,33 +866,49 @@ export default function Home() {
                         <p className="text-sm text-slate-500">
                           {assignment === null
                             ? "No team assigned"
-                            : assignment === "team1"
-                              ? "Assigned to Team 1"
-                              : "Assigned to Team 2"}
+                            : `Assigned to ${getTeamLabel(assignment)}`}
+                          {" · "}
+                          {playerGenders[player] === "female" ? "Female" : "Male"}
                         </p>
                       </div>
 
-                      <label className="w-full md:w-44">
-                        <span className="sr-only">Assign team for {player}</span>
-                        <select
-                          value={assignment ?? ""}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            assignPlayer(
-                              player,
-                              value === "" ? null : (value as TeamKey),
-                            );
-                          }}
-                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
-                        >
-                          <option value="">No team</option>
-                          {TEAM_OPTIONS.map((option) => (
-                            <option key={option.key} value={option.key}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
+                        <label className="w-full sm:w-32">
+                          <span className="sr-only">Gender for {player}</span>
+                          <select
+                            value={playerGenders[player] ?? "male"}
+                            onChange={(event) =>
+                              assignPlayerGender(player, event.target.value as PlayerGender)
+                            }
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
+                          >
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                          </select>
+                        </label>
+
+                        <label className="w-full md:w-44">
+                          <span className="sr-only">Assign team for {player}</span>
+                          <select
+                            value={assignment ?? ""}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              assignPlayer(
+                                player,
+                                value === "" ? null : (value as TeamKey),
+                              );
+                            }}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
+                          >
+                            <option value="">No team</option>
+                            {TEAM_OPTIONS.map((option) => (
+                              <option key={option.key} value={option.key}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
                     </div>
                   );
                 })}
@@ -1076,68 +1217,37 @@ export default function Home() {
               <p className="text-sm font-medium text-slate-500">Dashboard</p>
               <h2 className="mt-1 text-2xl font-semibold text-slate-900">Saved game results</h2>
               <p className="mt-2 text-sm text-slate-600">
-                View player totals, best overall player, and game history in one clean overview.
+                View player totals, best male and female players, and game history in one clean overview.
               </p>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">Best player overall</h3>
-              {bestOverallPlayer ? (
-                <div className="mt-3 grid gap-3 sm:grid-cols-4">
-                  <div className="rounded-2xl bg-blue-50 p-4">
-                    <p className="text-sm text-slate-500">Player</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-900">{bestOverallPlayer.name}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">Total points</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-900">{bestOverallPlayer.points}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">MPV wins</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-900">{bestOverallPlayer.bestPlayerWins}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">Top contribution</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-900">{bestOverallPlayer.topPercentage}%</p>
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-3 text-sm text-slate-500">No records yet.</p>
-              )}
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-lg font-semibold text-slate-900">Best male player</h3>
+                {renderBestPlayerCard(bestMalePlayer, "bg-blue-50")}
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-lg font-semibold text-slate-900">Best female player</h3>
+                {renderBestPlayerCard(bestFemalePlayer, "bg-pink-50")}
+              </div>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">Player totals (bar graph)</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Bars compare total points across all saved games.
-              </p>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-lg font-semibold text-slate-900">Male ranking</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Male players ranked by total points across all saved games.
+                </p>
+                <div className="mt-4">{renderRankingList(maleRanking, "bg-blue-600")}</div>
+              </div>
 
-              <div className="mt-4 space-y-3">
-                {dashboardPlayers.length === 0 && (
-                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-                    No saved games yet.
-                  </div>
-                )}
-                {dashboardPlayers.map((player) => {
-                  const widthPercent = Math.max(
-                    4,
-                    Math.round((player.points / dashboardMaxPoints) * 100),
-                  );
-                  return (
-                    <div key={player.name} className="grid grid-cols-[140px_1fr_auto] items-center gap-3">
-                      <div>
-                        <p className="font-medium text-slate-900">{player.name}</p>
-                      </div>
-                      <div className="h-6 rounded-full bg-slate-100 p-1">
-                        <div
-                          className="h-full rounded-full bg-blue-600"
-                          style={{ width: `${widthPercent}%` }}
-                        />
-                      </div>
-                      <div className="text-sm font-semibold text-slate-700">{player.points}</div>
-                    </div>
-                  );
-                })}
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-lg font-semibold text-slate-900">Female ranking</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Female players ranked by total points across all saved games.
+                </p>
+                <div className="mt-4">{renderRankingList(femaleRanking, "bg-pink-500")}</div>
               </div>
             </div>
 
