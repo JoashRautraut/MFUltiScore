@@ -1,38 +1,59 @@
 # MFUltiScore
 
-Ultimate Frisbee stat tracking app built with Next.js.
+Ultimate Frisbee stat tracking app.
 
-The live app is in the `mfultiscore-app` folder.
+**Live app:** https://joashrautraut.github.io/MFUltiScore/
 
-## GitHub Pages
+---
 
-Site URL: https://joashrautraut.github.io/MFUltiScore/
+## Fix GitHub Pages (if you only see this README)
 
-### One-time GitHub setup
+GitHub is showing this file because Pages is pointed at the **main** branch.  
+The real app must be deployed from the **gh-pages** branch.
 
-1. Open your repo on GitHub: **Settings → Pages**
-2. Under **Build and deployment**, set **Source** to **GitHub Actions**
-3. Push the latest code to the `main` branch
-
-The workflow in `.github/workflows/deploy-github-pages.yml` will build the Next.js app and deploy it automatically.
-
-### Local test before deploy
+### Step 1 — Push your latest code
 
 ```bash
-cd mfultiscore-app
-npm install
-npm run build:github
+git add .
+git commit -m "Fix GitHub Pages deployment"
+git push origin MFUS-1.0
 ```
 
-The static site is generated in `mfultiscore-app/out`.
+Also merge to `main` when ready:
 
-### Important notes
+```bash
+git checkout main
+git merge MFUS-1.0
+git push origin main
+```
 
-- GitHub Pages only hosts the **frontend** (static files).
-- Login, register, and stats currently use **browser storage** on the deployed site.
-- Google Sheets API routes are **not** included in the GitHub Pages build. They still work locally with `npm run dev` when your friend sets up the database.
+### Step 2 — Wait for GitHub Actions
 
-### Development
+1. Open your repo on GitHub
+2. Click the **Actions** tab
+3. Open **Deploy to GitHub Pages**
+4. Wait until it shows a green checkmark
+
+This workflow builds `mfultiscore-app` and publishes the `out` folder to the **gh-pages** branch.
+
+### Step 3 — Change Pages settings (important)
+
+1. Go to **Settings → Pages**
+2. Under **Build and deployment**
+3. Set **Source** to **Deploy from a branch**
+4. Set **Branch** to **gh-pages** (not `main`)
+5. Set folder to **/ (root)**
+6. Click **Save**
+
+### Step 4 — Open the app
+
+Visit: https://joashrautraut.github.io/MFUltiScore/
+
+Hard refresh if needed: `Ctrl + F5`
+
+---
+
+## Local development
 
 ```bash
 cd mfultiscore-app
@@ -41,3 +62,13 @@ npm run dev
 ```
 
 Open http://localhost:3000
+
+## Local build test (same as GitHub deploy)
+
+```bash
+cd mfultiscore-app
+npm install
+npm run build:github
+```
+
+Built files are in `mfultiscore-app/out`.
