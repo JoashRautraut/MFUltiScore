@@ -129,11 +129,21 @@ function getTeamLabel(team: TeamKey) {
 
 function getTeamAccent(team: TeamKey) {
   const palette = [
-    { soft: "bg-blue-50", strong: "bg-blue-600", ring: "border-blue-200" },
-    { soft: "bg-emerald-50", strong: "bg-emerald-600", ring: "border-emerald-200" },
-    { soft: "bg-amber-50", strong: "bg-amber-500", ring: "border-amber-200" },
-    { soft: "bg-violet-50", strong: "bg-violet-600", ring: "border-violet-200" },
-    { soft: "bg-rose-50", strong: "bg-rose-600", ring: "border-rose-200" },
+    { soft: "bg-blue-50", strong: "bg-blue-600", ring: "border-blue-300", badge: "bg-blue-100 text-blue-800", label: "text-blue-700" },
+    { soft: "bg-emerald-50", strong: "bg-emerald-600", ring: "border-emerald-300", badge: "bg-emerald-100 text-emerald-800", label: "text-emerald-700" },
+    { soft: "bg-amber-50", strong: "bg-amber-500", ring: "border-amber-300", badge: "bg-amber-100 text-amber-800", label: "text-amber-700" },
+    { soft: "bg-violet-50", strong: "bg-violet-600", ring: "border-violet-300", badge: "bg-violet-100 text-violet-800", label: "text-violet-700" },
+    { soft: "bg-rose-50", strong: "bg-rose-600", ring: "border-rose-300", badge: "bg-rose-100 text-rose-800", label: "text-rose-700" },
+    { soft: "bg-cyan-50", strong: "bg-cyan-600", ring: "border-cyan-300", badge: "bg-cyan-100 text-cyan-800", label: "text-cyan-700" },
+    { soft: "bg-orange-50", strong: "bg-orange-500", ring: "border-orange-300", badge: "bg-orange-100 text-orange-800", label: "text-orange-700" },
+    { soft: "bg-indigo-50", strong: "bg-indigo-600", ring: "border-indigo-300", badge: "bg-indigo-100 text-indigo-800", label: "text-indigo-700" },
+    { soft: "bg-lime-50", strong: "bg-lime-600", ring: "border-lime-300", badge: "bg-lime-100 text-lime-800", label: "text-lime-700" },
+    { soft: "bg-fuchsia-50", strong: "bg-fuchsia-600", ring: "border-fuchsia-300", badge: "bg-fuchsia-100 text-fuchsia-800", label: "text-fuchsia-700" },
+    { soft: "bg-sky-50", strong: "bg-sky-600", ring: "border-sky-300", badge: "bg-sky-100 text-sky-800", label: "text-sky-700" },
+    { soft: "bg-teal-50", strong: "bg-teal-600", ring: "border-teal-300", badge: "bg-teal-100 text-teal-800", label: "text-teal-700" },
+    { soft: "bg-pink-50", strong: "bg-pink-600", ring: "border-pink-300", badge: "bg-pink-100 text-pink-800", label: "text-pink-700" },
+    { soft: "bg-red-50", strong: "bg-red-600", ring: "border-red-300", badge: "bg-red-100 text-red-800", label: "text-red-700" },
+    { soft: "bg-yellow-50", strong: "bg-yellow-500", ring: "border-yellow-300", badge: "bg-yellow-100 text-yellow-800", label: "text-yellow-700" },
   ];
   const index = TEAM_OPTIONS.findIndex((option) => option.key === team);
   return palette[index % palette.length];
@@ -382,13 +392,6 @@ export default function Home() {
     setPlayerAssignments((current) => ({
       ...current,
       [name]: team,
-    }));
-  }
-
-  function assignPlayerGender(name: string, gender: PlayerGender) {
-    setPlayerGenders((current) => ({
-      ...current,
-      [name]: gender,
     }));
   }
 
@@ -811,17 +814,20 @@ export default function Home() {
                   <p className="text-sm text-slate-500">No team</p>
                   <p className="mt-2 text-3xl font-semibold">{unassignedPlayers.length}</p>
                 </div>
-                {TEAM_OPTIONS.map((option) => (
-                  <div
-                    key={option.key}
-                    className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"
-                  >
-                    <p className="text-sm text-slate-500">{option.label}</p>
-                    <p className="mt-2 text-3xl font-semibold">
-                      {teamSelections[option.key].length}
-          </p>
-        </div>
-                ))}
+                {TEAM_OPTIONS.map((option) => {
+                  const accent = getTeamAccent(option.key);
+                  return (
+                    <div
+                      key={option.key}
+                      className={`rounded-3xl border p-4 shadow-sm ${accent.ring} ${accent.soft}`}
+                    >
+                      <p className={`text-sm font-medium ${accent.label}`}>{option.label}</p>
+                      <p className="mt-2 text-3xl font-semibold text-slate-900">
+                        {teamSelections[option.key].length}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
 
               <button
@@ -855,60 +861,59 @@ export default function Home() {
               <div className="grid gap-3">
                 {filteredSetupPlayers.map((player) => {
                   const assignment = playerAssignments[player];
+                  const accent = assignment ? getTeamAccent(assignment) : null;
 
                   return (
                     <div
                       key={player}
-                      className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between"
+                      className={`flex flex-col gap-3 rounded-2xl border p-4 md:flex-row md:items-center md:justify-between ${
+                        accent
+                          ? `${accent.ring} ${accent.soft} border-2`
+                          : "border-slate-200 bg-white"
+                      }`}
                     >
-                      <div>
-                        <p className="font-medium text-slate-900">{player}</p>
-                        <p className="text-sm text-slate-500">
-                          {assignment === null
-                            ? "No team assigned"
-                            : `Assigned to ${getTeamLabel(assignment)}`}
-                          {" · "}
-                          {playerGenders[player] === "female" ? "Female" : "Male"}
-                        </p>
+                      <div className="flex items-center gap-3">
+                        {accent && (
+                          <span className={`h-10 w-1.5 rounded-full ${accent.strong}`} />
+                        )}
+                        <div>
+                          <p className="font-medium text-slate-900">{player}</p>
+                          <p className="text-sm text-slate-500">
+                            {assignment === null
+                              ? "No team assigned"
+                              : `Assigned to ${getTeamLabel(assignment)}`}
+                          </p>
+                          {accent && assignment && (
+                            <span className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${accent.badge}`}>
+                              {getTeamLabel(assignment)}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto">
-                        <label className="w-full sm:w-32">
-                          <span className="sr-only">Gender for {player}</span>
-                          <select
-                            value={playerGenders[player] ?? "male"}
-                            onChange={(event) =>
-                              assignPlayerGender(player, event.target.value as PlayerGender)
-                            }
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
-                          >
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
-                          </select>
-                        </label>
-
-                        <label className="w-full md:w-44">
-                          <span className="sr-only">Assign team for {player}</span>
-                          <select
-                            value={assignment ?? ""}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              assignPlayer(
-                                player,
-                                value === "" ? null : (value as TeamKey),
-                              );
-                            }}
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-400"
-                          >
-                            <option value="">No team</option>
-                            {TEAM_OPTIONS.map((option) => (
-                              <option key={option.key} value={option.key}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
+                      <label className="w-full md:w-44">
+                        <span className="sr-only">Assign team for {player}</span>
+                        <select
+                          value={assignment ?? ""}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            assignPlayer(
+                              player,
+                              value === "" ? null : (value as TeamKey),
+                            );
+                          }}
+                          className={`w-full rounded-xl border bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-400 ${
+                            accent ? accent.ring : "border-slate-200"
+                          }`}
+                        >
+                          <option value="">No team</option>
+                          {TEAM_OPTIONS.map((option) => (
+                            <option key={option.key} value={option.key}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
                   );
                 })}
