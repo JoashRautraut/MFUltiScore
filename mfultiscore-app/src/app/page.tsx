@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { STAT_TYPES, StatType } from "@/types/stats";
 
 type Screen = "setup" | "live" | "summary" | "dashboard";
-type TeamKey = "team1" | "team2" | "team3" | "team4" | "team5";
+type TeamIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+type TeamKey = `team${TeamIndex}`;
 
 type ActivePlayer = {
   name: string;
@@ -25,6 +26,10 @@ type CompletedGame = {
   date: string;
   endedAt: string;
   timerSeconds: number;
+  matchup: {
+    home: TeamKey;
+    away: TeamKey;
+  };
   teamPlayers: Record<TeamKey, ActivePlayer[]>;
   bestPlayer: {
     name: string;
@@ -34,13 +39,10 @@ type CompletedGame = {
   };
 };
 
-const TEAM_OPTIONS: { key: TeamKey; label: string }[] = [
-  { key: "team1", label: "Team 1" },
-  { key: "team2", label: "Team 2" },
-  { key: "team3", label: "Team 3" },
-  { key: "team4", label: "Team 4" },
-  { key: "team5", label: "Team 5" },
-];
+const TEAM_OPTIONS = Array.from({ length: 15 }, (_, index) => ({
+  key: `team${index + 1}` as TeamKey,
+  label: `Team ${index + 1}`,
+}));
 
 const initialCompletedGames: CompletedGame[] = [
   {
@@ -48,6 +50,10 @@ const initialCompletedGames: CompletedGame[] = [
     date: "2026-06-28",
     endedAt: "04:42 PM",
     timerSeconds: 3180,
+    matchup: {
+      home: "team1",
+      away: "team2",
+    },
     teamPlayers: {
       team1: [
         { name: "Ava", team: "team1", counts: { Block: 1, Assist: 2, Score: 2, Callahan: 0 } },
@@ -60,6 +66,16 @@ const initialCompletedGames: CompletedGame[] = [
       team3: [],
       team4: [],
       team5: [],
+      team6: [],
+      team7: [],
+      team8: [],
+      team9: [],
+      team10: [],
+      team11: [],
+      team12: [],
+      team13: [],
+      team14: [],
+      team15: [],
     },
     bestPlayer: { name: "Ava", team: "team1", percentage: 38, points: 7 },
   },
@@ -74,23 +90,23 @@ function createPlayer(name: string, team: TeamKey): ActivePlayer {
 }
 
 function createEmptyTeamPlayers(): Record<TeamKey, ActivePlayer[]> {
-  return {
-    team1: [],
-    team2: [],
-    team3: [],
-    team4: [],
-    team5: [],
-  };
+  return TEAM_OPTIONS.reduce(
+    (acc, option) => {
+      acc[option.key] = [];
+      return acc;
+    },
+    {} as Record<TeamKey, ActivePlayer[]>,
+  );
 }
 
 function createEmptyTeamNameGroups(): Record<TeamKey, string[]> {
-  return {
-    team1: [],
-    team2: [],
-    team3: [],
-    team4: [],
-    team5: [],
-  };
+  return TEAM_OPTIONS.reduce(
+    (acc, option) => {
+      acc[option.key] = [];
+      return acc;
+    },
+    {} as Record<TeamKey, string[]>,
+  );
 }
 
 function flattenPlayers(teamPlayers: Record<TeamKey, ActivePlayer[]>) {
@@ -102,14 +118,19 @@ function getTeamLabel(team: TeamKey) {
 }
 
 function getTeamAccent(team: TeamKey) {
-  const accents: Record<TeamKey, { soft: string; strong: string; ring: string }> = {
-    team1: { soft: "bg-blue-50", strong: "bg-blue-600", ring: "border-blue-200" },
-    team2: { soft: "bg-emerald-50", strong: "bg-emerald-600", ring: "border-emerald-200" },
-    team3: { soft: "bg-amber-50", strong: "bg-amber-500", ring: "border-amber-200" },
-    team4: { soft: "bg-violet-50", strong: "bg-violet-600", ring: "border-violet-200" },
-    team5: { soft: "bg-rose-50", strong: "bg-rose-600", ring: "border-rose-200" },
-  };
-  return accents[team];
+  const palette = [
+    { soft: "bg-blue-50", strong: "bg-blue-600", ring: "border-blue-200" },
+    { soft: "bg-emerald-50", strong: "bg-emerald-600", ring: "border-emerald-200" },
+    { soft: "bg-amber-50", strong: "bg-amber-500", ring: "border-amber-200" },
+    { soft: "bg-violet-50", strong: "bg-violet-600", ring: "border-violet-200" },
+    { soft: "bg-rose-50", strong: "bg-rose-600", ring: "border-rose-200" },
+  ];
+  const index = TEAM_OPTIONS.findIndex((option) => option.key === team);
+  return palette[index % palette.length];
+}
+
+function getDifferentTeam(team: TeamKey): TeamKey {
+  return (TEAM_OPTIONS.find((option) => option.key !== team)?.key ?? "team1") as TeamKey;
 }
 
 function totalCounts(counts: Record<StatType, number>) {
@@ -266,27 +287,31 @@ export default function Home() {
 
   const bestPlayerToday = useMemo(
     () =>
-      getBestPlayer({
-        team1: matchup.home === "team1" || matchup.away === "team1" ? teamPlayers.team1 : [],
-        team2: matchup.home === "team2" || matchup.away === "team2" ? teamPlayers.team2 : [],
-        team3: matchup.home === "team3" || matchup.away === "team3" ? teamPlayers.team3 : [],
-        team4: matchup.home === "team4" || matchup.away === "team4" ? teamPlayers.team4 : [],
-        team5: matchup.home === "team5" || matchup.away === "team5" ? teamPlayers.team5 : [],
-      }),
+      getBestPlayer(
+        TEAM_OPTIONS.reduce(
+          (acc, option) => {
+            acc[option.key] =
+              matchup.home === option.key || matchup.away === option.key
+                ? teamPlayers[option.key]
+                : [];
+            return acc;
+          },
+          createEmptyTeamPlayers(),
+        ),
+      ),
     [matchup, teamPlayers],
   );
 
   const dashboardPlayers = useMemo(() => {
     const totals = new Map<
       string,
-      { name: string; team: TeamKey; points: number; games: number; bestPlayerWins: number; topPercentage: number }
+      { name: string; points: number; games: number; bestPlayerWins: number; topPercentage: number }
     >();
 
     for (const game of completedGames) {
       for (const player of flattenPlayers(game.teamPlayers)) {
         const current = totals.get(player.name) ?? {
           name: player.name,
-          team: player.team,
           points: 0,
           games: 0,
           bestPlayerWins: 0,
@@ -307,6 +332,16 @@ export default function Home() {
 
     return [...totals.values()].sort((a, b) => b.points - a.points);
   }, [completedGames]);
+
+  const bestOverallPlayer = useMemo(
+    () => dashboardPlayers[0] ?? null,
+    [dashboardPlayers],
+  );
+
+  const dashboardMaxPoints = useMemo(
+    () => dashboardPlayers[0]?.points ?? 1,
+    [dashboardPlayers],
+  );
 
   function assignPlayer(name: string, team: TeamKey | null) {
     setPlayerAssignments((current) => ({
@@ -416,14 +451,20 @@ export default function Home() {
         date,
         endedAt: formatClockTime(new Date()),
         timerSeconds: elapsedSeconds,
+        matchup,
         teamPlayers,
-        bestPlayer: getBestPlayer({
-          team1: matchup.home === "team1" || matchup.away === "team1" ? teamPlayers.team1 : [],
-          team2: matchup.home === "team2" || matchup.away === "team2" ? teamPlayers.team2 : [],
-          team3: matchup.home === "team3" || matchup.away === "team3" ? teamPlayers.team3 : [],
-          team4: matchup.home === "team4" || matchup.away === "team4" ? teamPlayers.team4 : [],
-          team5: matchup.home === "team5" || matchup.away === "team5" ? teamPlayers.team5 : [],
-        }),
+        bestPlayer: getBestPlayer(
+          TEAM_OPTIONS.reduce(
+            (acc, option) => {
+              acc[option.key] =
+                matchup.home === option.key || matchup.away === option.key
+                  ? teamPlayers[option.key]
+                  : [];
+              return acc;
+            },
+            createEmptyTeamPlayers(),
+          ),
+        ),
       },
       ...current,
     ]);
@@ -595,7 +636,7 @@ export default function Home() {
                         const nextHome = event.target.value as TeamKey;
                         setMatchup((current) => ({
                           home: nextHome,
-                          away: current.away === nextHome ? "team2" : current.away,
+                          away: current.away === nextHome ? getDifferentTeam(nextHome) : current.away,
                         }));
                       }}
                       className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
@@ -619,7 +660,7 @@ export default function Home() {
                       onChange={(event) => {
                         const nextAway = event.target.value as TeamKey;
                         setMatchup((current) => ({
-                          home: current.home === nextAway ? "team1" : current.home,
+                          home: current.home === nextAway ? getDifferentTeam(nextAway) : current.home,
                           away: nextAway,
                         }));
                       }}
@@ -640,7 +681,7 @@ export default function Home() {
                 )}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+              <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-8 2xl:grid-cols-10">
                 <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                   <p className="text-sm text-slate-500">No team</p>
                   <p className="mt-2 text-3xl font-semibold">{unassignedPlayers.length}</p>
@@ -941,6 +982,56 @@ export default function Home() {
                       </div>
                     </summary>
 
+                    <div className="mt-3 rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
+                      {getTeamLabel(game.matchup.home)} VS {getTeamLabel(game.matchup.away)}
+                    </div>
+
+                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                      {[game.matchup.home, game.matchup.away].map((teamKey) => (
+                        <div
+                          key={`${game.id}-${teamKey}`}
+                          className="rounded-2xl border border-slate-200 bg-white p-4"
+                        >
+                          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                            {getTeamLabel(teamKey)}
+                          </h4>
+                          <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                            <table className="min-w-full text-left text-sm">
+                              <thead className="bg-slate-100 text-slate-600">
+                                <tr>
+                                  <th className="px-3 py-2">Player</th>
+                                  <th className="px-3 py-2">B</th>
+                                  <th className="px-3 py-2">A</th>
+                                  <th className="px-3 py-2">S</th>
+                                  <th className="px-3 py-2">C</th>
+                                  <th className="px-3 py-2">Pts</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {game.teamPlayers[teamKey].map((player) => (
+                                  <tr key={`${game.id}-${teamKey}-${player.name}`} className="border-t border-slate-200 bg-white">
+                                    <td className="px-3 py-2 font-medium text-slate-900">{player.name}</td>
+                                    <td className="px-3 py-2">{player.counts.Block}</td>
+                                    <td className="px-3 py-2">{player.counts.Assist}</td>
+                                    <td className="px-3 py-2">{player.counts.Score}</td>
+                                    <td className="px-3 py-2">{player.counts.Callahan}</td>
+                                    <td className="px-3 py-2">{playerPoints(player.counts)}</td>
+                                  </tr>
+                                ))}
+                                {game.teamPlayers[teamKey].length === 0 && (
+                                  <tr>
+                                    <td colSpan={6} className="px-3 py-3 text-center text-slate-500">
+                                      No players in this team.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
                     <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                       <table className="min-w-full text-left text-sm">
                         <thead className="bg-slate-100 text-slate-600">
@@ -985,41 +1076,69 @@ export default function Home() {
               <p className="text-sm font-medium text-slate-500">Dashboard</p>
               <h2 className="mt-1 text-2xl font-semibold text-slate-900">Saved game results</h2>
               <p className="mt-2 text-sm text-slate-600">
-                View player totals and every saved game in one clean overview.
+                View player totals, best overall player, and game history in one clean overview.
               </p>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-3">
-              {dashboardPlayers.map((player) => (
-                <div key={player.name} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900">{player.name}</h3>
-                      <p className="text-sm text-slate-500">
-                        {getTeamLabel(player.team)}
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
-                      {player.points} pts
-                    </span>
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900">Best player overall</h3>
+              {bestOverallPlayer ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                  <div className="rounded-2xl bg-blue-50 p-4">
+                    <p className="text-sm text-slate-500">Player</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{bestOverallPlayer.name}</p>
                   </div>
-
-                  <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-                    <div className="rounded-2xl bg-slate-50 p-3">
-                      <p className="text-slate-500">Games</p>
-                      <p className="mt-1 font-semibold text-slate-900">{player.games}</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-50 p-3">
-                      <p className="text-slate-500">MPV</p>
-                      <p className="mt-1 font-semibold text-slate-900">{player.bestPlayerWins}x</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-50 p-3">
-                      <p className="text-slate-500">Top %</p>
-                      <p className="mt-1 font-semibold text-slate-900">{player.topPercentage}%</p>
-                    </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-sm text-slate-500">Total points</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{bestOverallPlayer.points}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-sm text-slate-500">MPV wins</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{bestOverallPlayer.bestPlayerWins}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-sm text-slate-500">Top contribution</p>
+                    <p className="mt-1 text-2xl font-semibold text-slate-900">{bestOverallPlayer.topPercentage}%</p>
                   </div>
                 </div>
-              ))}
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">No records yet.</p>
+              )}
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-900">Player totals (bar graph)</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Bars compare total points across all saved games.
+              </p>
+
+              <div className="mt-4 space-y-3">
+                {dashboardPlayers.length === 0 && (
+                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                    No saved games yet.
+                  </div>
+                )}
+                {dashboardPlayers.map((player) => {
+                  const widthPercent = Math.max(
+                    4,
+                    Math.round((player.points / dashboardMaxPoints) * 100),
+                  );
+                  return (
+                    <div key={player.name} className="grid grid-cols-[140px_1fr_auto] items-center gap-3">
+                      <div>
+                        <p className="font-medium text-slate-900">{player.name}</p>
+                      </div>
+                      <div className="h-6 rounded-full bg-slate-100 p-1">
+                        <div
+                          className="h-full rounded-full bg-blue-600"
+                          style={{ width: `${widthPercent}%` }}
+                        />
+                      </div>
+                      <div className="text-sm font-semibold text-slate-700">{player.points}</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
