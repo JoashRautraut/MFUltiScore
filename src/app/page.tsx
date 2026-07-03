@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PlayerProgressChart } from "@/components/PlayerProgressChart";
 import { STAT_TYPES, StatType } from "@/types/stats";
 import { clearAuthUser, getAuthUser, getRegisteredPlayers, isAdmin, type AuthUser } from "@/lib/auth";
 
@@ -471,7 +472,7 @@ export default function Home() {
 
     for (const game of completedGames) {
       for (const player of flattenPlayers(game.teamPlayers)) {
-        if (player.name !== playerName) {
+        if (player.name.trim().toLowerCase() !== playerName.trim().toLowerCase()) {
           continue;
         }
 
@@ -1508,6 +1509,8 @@ export default function Home() {
                 ))}
               </div>
             </div>
+
+            <PlayerProgressChart games={personalProgress.gameHistory} />
 
             <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-200 px-5 py-4">
