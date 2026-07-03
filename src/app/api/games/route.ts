@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       date?: string;
       opponent?: string;
       location?: string;
+      spreadsheetId?: string;
     };
 
     if (!body.date?.trim() || !body.opponent?.trim()) {
@@ -27,11 +28,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const game = await createGame({
-      date: body.date,
-      opponent: body.opponent,
-      location: body.location,
-    });
+    const game = await createGame(
+      {
+        date: body.date,
+        opponent: body.opponent,
+        location: body.location,
+      },
+      body.spreadsheetId,
+    );
 
     return NextResponse.json({ game }, { status: 201 });
   } catch (error) {

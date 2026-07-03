@@ -176,7 +176,7 @@ export function registerUser(input: {
   playerName: string;
   gender: PlayerGender;
 }): { ok: true } | { ok: false; error: string } {
-  return createRegisteredUser(input, "user");
+  return createRegisteredUser(input, "admin");
 }
 
 export function registerAdminUser(input: {

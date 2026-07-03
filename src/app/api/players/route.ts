@@ -14,7 +14,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { name?: string };
+    const body = (await request.json()) as { name?: string; spreadsheetId?: string };
     const name = body.name?.trim();
 
     if (!name) {
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const player = await addPlayer(name);
+    const player = await addPlayer(name, body.spreadsheetId);
     return NextResponse.json({ player }, { status: 201 });
   } catch (error) {
     const message =
