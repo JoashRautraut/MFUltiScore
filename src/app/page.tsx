@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { STAT_TYPES, StatType } from "@/types/stats";
 
 type Screen = "setup" | "live" | "summary" | "dashboard";
-type TeamKey = string; // Dynanmic Team IDs
+type TeamKey = string; // Dynamic Team IDs
 
 type ActivePlayer = {
   name: string;
@@ -122,6 +122,9 @@ export default function Home() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [completedGames, setCompletedGames] = useState<CompletedGame[]>([]);
 
+  // Static Fallback Mode State
+  const [isStaticMode, setIsStaticMode] = useState(false);
+
   // Dynamic Teams CRUD States
   const [teamsList, setTeamsList] = useState<Team[]>([]);
   const [newTeamName, setNewTeamName] = useState("");
@@ -159,80 +162,159 @@ export default function Home() {
     localStorage.setItem("mfultiscore_spreadsheet_url", url);
   }
 
-  // Fetch players from API
-  async function fetchPlayers() {
-    try {
-      const res = await fetch("/api/players");
-      const data = await res.json();
-      if (data.players) {
-        setPlayers(data.players);
-        setPlayerAssignments((current) => {
-          const updated = { ...current };
-          data.players.forEach((p: any) => {
-            if (updated[p.name] === undefined) {
-              updated[p.name] = null;
-            }
-          });
-          return updated;
-        });
-      }
-    } catch (e) {
-      console.error("Failed to fetch players:", e);
-    }
+  function updatePlayerAssignments(playersList: any[]) {
+    setPlayerAssignments((current) => {
+      const updated = { ...current };
+      playersList.forEach((p: any) => {
+        if (updated[p.name] === undefined) {
+          updated[p.name] = null;
+        }
+      });
+      return updated;
+    });
   }
 
-  // Fetch games from API and reconstruct CompletedGame objects
-  async function fetchGames() {
-    try {
-      const res = await fetch("/api/games");
-      const data = await res.json();
-      if (data.games) {
-        const mapped = data.games.map((game: any) => {
-          try {
-            const details = JSON.parse(game.location);
-            return {
-              id: game.gameId,
-              date: game.date,
-              endedAt: details.endedAt || "",
-              timerSeconds: details.timerSeconds || 0,
-              teamPlayers: details.teamPlayers || {},
-              bestPlayer: getBestPlayer(details.teamPlayers || {}),
-            };
-          } catch (e) {
-            return {
-              id: game.gameId,
-              date: game.date,
-              endedAt: "N/A",
-              timerSeconds: 0,
-              teamPlayers: {},
-              bestPlayer: { name: "N/A", team: "team1", percentage: 0, points: 0 },
-            };
+  // Fetch players from API or localStorage fallback
+  async function fetchPlayers(forceStatic = isStaticMode) {
+    if (!forceStatic) {
+      try {
+        const res = await fetch("/api/players");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.players) {
+            setPlayers(data.players);
+            updatePlayerAssignments(data.players);
+            return;
           }
-        });
-
-        mapped.sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
-        setCompletedGames(mapped);
+        } else if (res.status === 404) {
+          setIsStaticMode(true);
+          forceStatic = true;
+        }
+      } catch (e) {
+        console.warn("API players failed, enabling Static Client-Only Mode:", e);
+        setIsStaticMode(true);
+        forceStatic = true;
       }
-    } catch (e) {
-      console.error("Failed to fetch games:", e);
+    }
+
+    // localStorage Mode
+    const local = localStorage.getItem("mfultiscore_players");
+    let playersList = local ? JSON.parse(local) : null;
+    if (!playersList) {
+      playersList = [
+        { playerId: "seed-1", name: "Ava", dateAdded: new Date().toISOString() },
+        { playerId: "seed-2", name: "Mia", dateAdded: new Date().toISOString() },
+        { playerId: "seed-3", name: "Noah", dateAdded: new Date().toISOString() },
+        { playerId: "seed-4", name: "Kai", dateAdded: new Date().toISOString() },
+        { playerId: "seed-5", name: "Liam", dateAdded: new Date().toISOString() },
+        { playerId: "seed-6", name: "Zoe", dateAdded: new Date().toISOString() },
+        { playerId: "seed-7", name: "Eli", dateAdded: new Date().toISOString() },
+        { playerId: "seed-8", name: "Jade", dateAdded: new Date().toISOString() },
+      ];
+      localStorage.setItem("mfultiscore_players", JSON.stringify(playersList));
+    }
+    setPlayers(playersList);
+    updatePlayerAssignments(playersList);
+  }
+
+  // Fetch games from API or localStorage fallback
+  async function fetchGames(forceStatic = isStaticMode) {
+    let gamesList = [];
+    if (!forceStatic) {
+      try {
+        const res = await fetch("/api/games");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.games) {
+            gamesList = data.games;
+          }
+        } else {
+          setIsStaticMode(true);
+          forceStatic = true;
+        }
+      } catch (e) {
+        setIsStaticMode(true);
+        forceStatic = true;
+      }
+    }
+
+    if (forceStatic) {
+      const local = localStorage.getItem("mfultiscore_games");
+      gamesList = local ? JSON.parse(local) : [];
+    }
+
+    const mapped = gamesList.map((game: any) => {
+      try {
+        const details = JSON.parse(game.location);
+        return {
+          id: game.gameId,
+          date: game.date,
+          endedAt: details.endedAt || "",
+          timerSeconds: details.timerSeconds || 0,
+          teamPlayers: details.teamPlayers || {},
+          bestPlayer: getBestPlayer(details.teamPlayers || {}),
+        };
+      } catch (e) {
+        return {
+          id: game.gameId,
+          date: game.date,
+          endedAt: "N/A",
+          timerSeconds: 0,
+          teamPlayers: {},
+          bestPlayer: { name: "N/A", team: "team1", percentage: 0, points: 0 },
+        };
+      }
+    });
+
+    mapped.sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
+    setCompletedGames(mapped);
+  }
+
+  // Fetch teams from API or localStorage fallback
+  async function fetchTeams(forceStatic = isStaticMode) {
+    let teams = [];
+    if (!forceStatic) {
+      try {
+        const res = await fetch("/api/teams");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.teams) {
+            setTeamsList(data.teams);
+            return;
+          }
+        } else if (res.status === 404) {
+          setIsStaticMode(true);
+          forceStatic = true;
+        }
+      } catch (e) {
+        setIsStaticMode(true);
+        forceStatic = true;
+      }
+    }
+
+    if (forceStatic) {
+      const local = localStorage.getItem("mfultiscore_teams");
+      teams = local ? JSON.parse(local) : null;
+      if (!teams) {
+        teams = [
+          { teamId: "team1", name: "Team 1", dateCreated: new Date().toISOString() },
+          { teamId: "team2", name: "Team 2", dateCreated: new Date().toISOString() },
+          { teamId: "team3", name: "Team 3", dateCreated: new Date().toISOString() },
+          { teamId: "team4", name: "Team 4", dateCreated: new Date().toISOString() },
+          { teamId: "team5", name: "Team 5", dateCreated: new Date().toISOString() },
+        ];
+        localStorage.setItem("mfultiscore_teams", JSON.stringify(teams));
+      }
+      setTeamsList(teams);
     }
   }
 
-  // Fetch teams from backend
-  async function fetchTeams() {
-    try {
-      const res = await fetch("/api/teams");
-      const data = await res.json();
-      if (data.teams) {
-        setTeamsList(data.teams);
-      }
-    } catch (e) {
-      console.error("Failed to fetch teams:", e);
+  // Fetch server config or set client-only defaults
+  async function fetchConfig(forceStatic = isStaticMode) {
+    if (forceStatic) {
+      setConfig({ isGoogleSheetsSupported: false, serviceAccountEmail: null });
+      return;
     }
-  }
-
-  // Fetch server config (Google Sheets service account status)
-  async function fetchConfig() {
     try {
       const res = await fetch("/api/config");
       const data = await res.json();
@@ -241,32 +323,52 @@ export default function Home() {
         serviceAccountEmail: data.serviceAccountEmail,
       });
     } catch (e) {
-      console.error("Failed to fetch config:", e);
+      setConfig({ isGoogleSheetsSupported: false, serviceAccountEmail: null });
     }
   }
 
-  // Fetch current active game (if any) to allow resuming sessions
-  async function fetchActiveGame() {
-    try {
-      const res = await fetch("/api/active-game");
-      const data = await res.json();
-      if (data.activeGame) {
-        setActiveGame(data.activeGame);
+  // Fetch current active game or localStorage fallback
+  async function fetchActiveGame(forceStatic = isStaticMode) {
+    let active = null;
+    if (!forceStatic) {
+      try {
+        const res = await fetch("/api/active-game");
+        if (res.ok) {
+          const data = await res.json();
+          active = data.activeGame;
+        } else if (res.status === 404) {
+          setIsStaticMode(true);
+          forceStatic = true;
+        }
+      } catch (e) {
+        setIsStaticMode(true);
+        forceStatic = true;
       }
-    } catch (e) {
-      console.error("Failed to fetch active game:", e);
     }
+
+    if (forceStatic) {
+      const local = localStorage.getItem("mfultiscore_active_game");
+      active = local ? JSON.parse(local) : null;
+    }
+    setActiveGame(active);
   }
 
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0];
     setDate(today);
 
-    fetchPlayers();
-    fetchGames();
-    fetchTeams();
-    fetchConfig();
-    fetchActiveGame();
+    // Auto-detect static hosts like github.io
+    const isHostStatic = typeof window !== "undefined" && window.location.hostname.includes("github.io");
+    const initStatic = isStaticMode || isHostStatic;
+    if (initStatic) {
+      setIsStaticMode(true);
+    }
+
+    fetchPlayers(initStatic);
+    fetchGames(initStatic);
+    fetchTeams(initStatic);
+    fetchConfig(initStatic);
+    fetchActiveGame(initStatic);
 
     const savedUrl = localStorage.getItem("mfultiscore_spreadsheet_url");
     if (savedUrl) {
@@ -315,80 +417,111 @@ export default function Home() {
       interval = window.setInterval(async () => {
         await fetchGames();
         await fetchTeams();
-        try {
-          const res = await fetch("/api/active-game");
-          const data = await res.json();
-          setActiveGame(data.activeGame);
-        } catch (e) {
-          console.error("Failed to poll active game:", e);
-        }
+        await fetchActiveGame();
       }, 5000);
     }
 
     return () => {
       if (interval) window.clearInterval(interval);
     };
-  }, [screen]);
+  }, [screen, isStaticMode]);
 
-  // Dynamic team CRUD actions
+  // Dynamic team CRUD actions with client fallbacks
   async function handleCreateTeam() {
     const name = newTeamName.trim();
     if (!name) return;
 
-    try {
-      const parsedSpreadsheetId = parseSpreadsheetId(spreadsheetUrl);
-      const res = await fetch("/api/teams", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          spreadsheetId: parsedSpreadsheetId || undefined,
-        }),
-      });
+    if (!isStaticMode) {
+      try {
+        const parsedSpreadsheetId = parseSpreadsheetId(spreadsheetUrl);
+        const res = await fetch("/api/teams", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            spreadsheetId: parsedSpreadsheetId || undefined,
+          }),
+        });
 
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || "Failed to create team.");
-        return;
+        if (res.ok) {
+          setNewTeamName("");
+          await fetchTeams();
+          return;
+        } else if (res.status === 404) {
+          setIsStaticMode(true);
+        } else {
+          const data = await res.json();
+          alert(data.error || "Failed to create team.");
+          return;
+        }
+      } catch (e) {
+        setIsStaticMode(true);
       }
-
-      setNewTeamName("");
-      await fetchTeams();
-    } catch (e) {
-      console.error(e);
-      alert("Error creating team.");
     }
+
+    // localStorage mode
+    const local = localStorage.getItem("mfultiscore_teams");
+    const currentTeams = local ? JSON.parse(local) : [];
+    if (currentTeams.some((t: any) => t.name.toLowerCase() === name.toLowerCase())) {
+      alert("A team with this name already exists.");
+      return;
+    }
+    const newTeam = {
+      teamId: Math.random().toString(36).substr(2, 9),
+      name,
+      dateCreated: new Date().toISOString(),
+    };
+    const updated = [...currentTeams, newTeam];
+    localStorage.setItem("mfultiscore_teams", JSON.stringify(updated));
+    setTeamsList(updated);
+    setNewTeamName("");
   }
 
   async function handleRenameTeam(teamId: string) {
     const name = editingTeamName.trim();
     if (!name) return;
 
-    try {
-      const parsedSpreadsheetId = parseSpreadsheetId(spreadsheetUrl);
-      const res = await fetch("/api/teams", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          teamId,
-          name,
-          spreadsheetId: parsedSpreadsheetId || undefined,
-        }),
-      });
+    if (!isStaticMode) {
+      try {
+        const parsedSpreadsheetId = parseSpreadsheetId(spreadsheetUrl);
+        const res = await fetch("/api/teams", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            teamId,
+            name,
+            spreadsheetId: parsedSpreadsheetId || undefined,
+          }),
+        });
 
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || "Failed to rename team.");
-        return;
+        if (res.ok) {
+          setEditingTeamId(null);
+          setEditingTeamName("");
+          await fetchTeams();
+          return;
+        } else if (res.status === 404) {
+          setIsStaticMode(true);
+        } else {
+          const data = await res.json();
+          alert(data.error || "Failed to rename team.");
+          return;
+        }
+      } catch (e) {
+        setIsStaticMode(true);
       }
-
-      setEditingTeamId(null);
-      setEditingTeamName("");
-      await fetchTeams();
-    } catch (e) {
-      console.error(e);
-      alert("Error renaming team.");
     }
+
+    // localStorage mode
+    const local = localStorage.getItem("mfultiscore_teams");
+    const currentTeams = local ? JSON.parse(local) : [];
+    const index = currentTeams.findIndex((t: any) => t.teamId === teamId);
+    if (index !== -1) {
+      currentTeams[index].name = name;
+      localStorage.setItem("mfultiscore_teams", JSON.stringify(currentTeams));
+      setTeamsList(currentTeams);
+    }
+    setEditingTeamId(null);
+    setEditingTeamName("");
   }
 
   async function handleDeleteTeam(teamId: string) {
@@ -396,32 +529,52 @@ export default function Home() {
       return;
     }
 
-    try {
-      const parsedSpreadsheetId = parseSpreadsheetId(spreadsheetUrl);
-      const url = `/api/teams?teamId=${teamId}${parsedSpreadsheetId ? `&spreadsheetId=${parsedSpreadsheetId}` : ""}`;
-      const res = await fetch(url, { method: "DELETE" });
+    if (!isStaticMode) {
+      try {
+        const parsedSpreadsheetId = parseSpreadsheetId(spreadsheetUrl);
+        const url = `/api/teams?teamId=${teamId}${parsedSpreadsheetId ? `&spreadsheetId=${parsedSpreadsheetId}` : ""}`;
+        const res = await fetch(url, { method: "DELETE" });
 
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || "Failed to delete team.");
-        return;
+        if (res.ok) {
+          setPlayerAssignments((current) => {
+            const updated = { ...current };
+            Object.keys(updated).forEach((p) => {
+              if (updated[p] === teamId) {
+                updated[p] = null;
+              }
+            });
+            return updated;
+          });
+          await fetchTeams();
+          return;
+        } else if (res.status === 404) {
+          setIsStaticMode(true);
+        } else {
+          const data = await res.json();
+          alert(data.error || "Failed to delete team.");
+          return;
+        }
+      } catch (e) {
+        setIsStaticMode(true);
       }
-
-      setPlayerAssignments((current) => {
-        const updated = { ...current };
-        Object.keys(updated).forEach((p) => {
-          if (updated[p] === teamId) {
-            updated[p] = null;
-          }
-        });
-        return updated;
-      });
-
-      await fetchTeams();
-    } catch (e) {
-      console.error(e);
-      alert("Error deleting team.");
     }
+
+    // localStorage mode
+    const local = localStorage.getItem("mfultiscore_teams");
+    const currentTeams = local ? JSON.parse(local) : [];
+    const updated = currentTeams.filter((t: any) => t.teamId !== teamId);
+    localStorage.setItem("mfultiscore_teams", JSON.stringify(updated));
+    setTeamsList(updated);
+
+    setPlayerAssignments((current) => {
+      const nextAssignments = { ...current };
+      Object.keys(nextAssignments).forEach((p) => {
+        if (nextAssignments[p] === teamId) {
+          nextAssignments[p] = null;
+        }
+      });
+      return nextAssignments;
+    });
   }
 
   const allSetupPlayers = useMemo(
@@ -534,36 +687,58 @@ export default function Home() {
     }));
   }
 
-  // Add a player using POST /api/players
+  // Add a player using POST /api/players or local fallback
   async function quickAddPlayer() {
     const normalized = quickAddName.trim();
     if (!normalized) {
       return;
     }
 
-    try {
-      const parsedSpreadsheetId = parseSpreadsheetId(spreadsheetUrl);
-      const res = await fetch("/api/players", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: normalized,
-          spreadsheetId: parsedSpreadsheetId || undefined,
-        }),
-      });
+    if (!isStaticMode) {
+      try {
+        const parsedSpreadsheetId = parseSpreadsheetId(spreadsheetUrl);
+        const res = await fetch("/api/players", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: normalized,
+            spreadsheetId: parsedSpreadsheetId || undefined,
+          }),
+        });
 
-      if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || "Failed to add player.");
-        return;
+        if (res.ok) {
+          await fetchPlayers();
+          setQuickAddName("");
+          return;
+        } else if (res.status === 404) {
+          setIsStaticMode(true);
+        } else {
+          const data = await res.json();
+          alert(data.error || "Failed to add player.");
+          return;
+        }
+      } catch (e) {
+        setIsStaticMode(true);
       }
-
-      await fetchPlayers();
-      setQuickAddName("");
-    } catch (e) {
-      console.error(e);
-      alert("Error adding player.");
     }
+
+    // localStorage Mode
+    const local = localStorage.getItem("mfultiscore_players");
+    const currentPlayers = local ? JSON.parse(local) : [];
+    if (currentPlayers.some((p: any) => p.name.toLowerCase() === normalized.toLowerCase())) {
+      alert("A player with this name already exists.");
+      return;
+    }
+    const newPlayer = {
+      playerId: Math.random().toString(36).substr(2, 9),
+      name: normalized,
+      dateAdded: new Date().toISOString(),
+    };
+    const updated = [...currentPlayers, newPlayer];
+    localStorage.setItem("mfultiscore_players", JSON.stringify(updated));
+    setPlayers(updated);
+    updatePlayerAssignments(updated);
+    setQuickAddName("");
   }
 
   // Trigger manual sheets sync
@@ -600,7 +775,7 @@ export default function Home() {
     }
   }
 
-  // Active game sync
+  // Active game sync supporting fallback mode
   async function syncActiveGame(
     activeMatchup: { home: string; away: string },
     activeDate: string,
@@ -620,15 +795,18 @@ export default function Home() {
     };
 
     setActiveGame(payload);
+    localStorage.setItem("mfultiscore_active_game", JSON.stringify(payload));
 
-    try {
-      await fetch("/api/active-game", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } catch (e) {
-      console.error("Failed to sync active game state:", e);
+    if (!isStaticMode) {
+      try {
+        await fetch("/api/active-game", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch (e) {
+        setIsStaticMode(true);
+      }
     }
   }
 
@@ -788,92 +966,132 @@ export default function Home() {
     syncActiveGame(matchup, date, timerSeconds, false, teamPlayers, logEntries);
   }
 
-  // Save the game and stats to the backend database & Google Sheet sync
+  // Save game to Server API or localStorage fallback
   async function saveGame() {
     setIsSaving(true);
     setSaveError("");
 
     const parsedSpreadsheetId = parseSpreadsheetId(spreadsheetUrl);
+    const gamePayload = {
+      date,
+      opponent: `${getTeamLabel(matchup.home)} vs ${getTeamLabel(matchup.away)}`,
+      location: JSON.stringify({
+        timerSeconds,
+        endedAt: formatClockTime(new Date()),
+        teamPlayers,
+      }),
+    };
 
-    try {
-      // 1. Create game record
-      const gameRes = await fetch("/api/games", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date,
-          opponent: `${getTeamLabel(matchup.home)} vs ${getTeamLabel(matchup.away)}`,
-          location: JSON.stringify({
-            timerSeconds,
-            endedAt: formatClockTime(new Date()),
-            teamPlayers,
-          }),
-          spreadsheetId: parsedSpreadsheetId || undefined,
-        }),
-      });
+    const statsPayload = logEntries.map((entry) => ({
+      playerName: entry.playerName,
+      statType: entry.statType,
+      timestamp: new Date(entry.id).toISOString(),
+    }));
 
-      const gameData = await gameRes.json();
-      if (!gameRes.ok) {
-        throw new Error(gameData.error || "Failed to save game record.");
-      }
-
-      const gameId = gameData.game.gameId;
-
-      // 2. Upload stats log in bulk
-      const statsToUpload = logEntries.map((entry) => ({
-        gameId,
-        playerName: entry.playerName,
-        statType: entry.statType,
-        timestamp: new Date(entry.id).toISOString(),
-      }));
-
-      if (statsToUpload.length > 0) {
-        const statsRes = await fetch("/api/stats", {
+    if (!isStaticMode) {
+      try {
+        const gameRes = await fetch("/api/games", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            stats: statsToUpload,
+            ...gamePayload,
             spreadsheetId: parsedSpreadsheetId || undefined,
           }),
         });
 
-        if (!statsRes.ok) {
-          const statsData = await statsRes.json();
-          throw new Error(statsData.error || "Failed to upload stats logs.");
+        const gameData = await gameRes.json();
+        if (!gameRes.ok) {
+          throw new Error(gameData.error || "Failed to save game record.");
         }
-      }
 
-      // 3. Sync player teams dynamically to sheets in background
-      if (parsedSpreadsheetId && config.isGoogleSheetsSupported) {
-        const activePlayers = flattenPlayers(teamPlayers);
-        for (const player of activePlayers) {
-          await fetch("/api/players", {
+        const gameId = gameData.game.gameId;
+
+        const statsToUpload = statsPayload.map((s) => ({ ...s, gameId }));
+        if (statsToUpload.length > 0) {
+          const statsRes = await fetch("/api/stats", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              name: player.name,
-              spreadsheetId: parsedSpreadsheetId,
+              stats: statsToUpload,
+              spreadsheetId: parsedSpreadsheetId || undefined,
             }),
           });
+
+          if (!statsRes.ok) {
+            const statsData = await statsRes.json();
+            throw new Error(statsData.error || "Failed to upload stats logs.");
+          }
         }
+
+        if (parsedSpreadsheetId && config.isGoogleSheetsSupported) {
+          const activePlayers = flattenPlayers(teamPlayers);
+          for (const player of activePlayers) {
+            await fetch("/api/players", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: player.name,
+                spreadsheetId: parsedSpreadsheetId,
+              }),
+            });
+          }
+        }
+
+        await fetch("/api/active-game", { method: "DELETE" });
+        setActiveGame(null);
+        localStorage.removeItem("mfultiscore_active_game");
+
+        setTeamPlayers({});
+        setLogEntries([]);
+        setTimerSeconds(0);
+
+        await fetchPlayers();
+        await fetchGames();
+        setScreen("dashboard");
+        setIsSaving(false);
+        return;
+      } catch (err: any) {
+        console.warn("Server save failed, falling back to local-only save:", err);
+        setIsStaticMode(true);
       }
-
-      await fetch("/api/active-game", { method: "DELETE" });
-      setActiveGame(null);
-
-      setTeamPlayers({});
-      setLogEntries([]);
-      setTimerSeconds(0);
-
-      await fetchPlayers();
-      await fetchGames();
-      setScreen("dashboard");
-    } catch (err: any) {
-      console.error(err);
-      setSaveError(err?.message || "Failed to save game.");
-    } finally {
-      setIsSaving(false);
     }
+
+    // Local storage save fallback
+    const gameId = Math.random().toString(36).substr(2, 9);
+    const newCompletedGame = {
+      gameId,
+      date: gamePayload.date,
+      opponent: gamePayload.opponent,
+      location: gamePayload.location,
+    };
+
+    const localGames = localStorage.getItem("mfultiscore_games");
+    const currentGames = localGames ? JSON.parse(localGames) : [];
+    const updatedGames = [newCompletedGame, ...currentGames];
+    localStorage.setItem("mfultiscore_games", JSON.stringify(updatedGames));
+
+    const localStats = localStorage.getItem("mfultiscore_stats");
+    const currentStats = localStats ? JSON.parse(localStats) : [];
+    const newStats = statsPayload.map((s) => ({
+      statId: Math.random().toString(36).substr(2, 9),
+      gameId,
+      playerName: s.playerName,
+      statType: s.statType,
+      timestamp: s.timestamp,
+    }));
+    localStorage.setItem("mfultiscore_stats", JSON.stringify([...currentStats, ...newStats]));
+
+    localStorage.removeItem("mfultiscore_active_game");
+    setActiveGame(null);
+
+    setTeamPlayers({});
+    setLogEntries([]);
+    setTimerSeconds(0);
+
+    await fetchPlayers(true);
+    await fetchGames(true);
+    setScreen("dashboard");
+    setIsSaving(false);
   }
 
   function renderPlayerCards(players: ActivePlayer[], team: string, label: string) {
@@ -1023,6 +1241,18 @@ export default function Home() {
         {screen === "setup" && (
           <section className="grid gap-4 xl:grid-cols-[1.1fr_1.6fr]">
             <div className="space-y-4">
+              {/* Static Mode Banner */}
+              {isStaticMode && (
+                <div className="rounded-3xl border border-slate-200 bg-slate-100 p-5 shadow-sm">
+                  <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                    <span>💡</span> Static Client-Only Mode
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    The app is hosted statically. Custom teams, players, and game history are saved directly in your browser's local storage.
+                  </p>
+                </div>
+              )}
+
               {/* Session Recovery Widget */}
               {activeGame && (
                 <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between animate-pulse-subtle">
@@ -1150,8 +1380,8 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Google Sheets Card */}
-              {config.isGoogleSheetsSupported ? (
+              {/* Google Sheets Card (Disabled in client static mode) */}
+              {!isStaticMode && config.isGoogleSheetsSupported ? (
                 <div className="rounded-3xl border border-blue-200 bg-blue-50/50 p-5 shadow-sm space-y-4">
                   <div>
                     <h3 className="text-lg font-semibold text-blue-950 flex items-center gap-2">
@@ -1225,10 +1455,10 @@ export default function Home() {
               ) : (
                 <div className="rounded-3xl border border-slate-200 bg-slate-100/50 p-5 shadow-sm">
                   <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-                    <span>💡</span> Local-Only Storage
+                    <span>💡</span> Local Storage Active
                   </h3>
                   <p className="mt-1 text-xs text-slate-500">
-                    Google Sheets sync is disabled (no credentials configured on server). Game records will be stored locally.
+                    Google Sheets sync requires dynamic server hosting. Scoring stats will be stored locally inside the browser.
                   </p>
                 </div>
               )}
@@ -1320,7 +1550,6 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Dynamic indicators list of counts */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 md:grid-cols-6">
                 <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                   <p className="text-sm text-slate-500">No team</p>
@@ -1643,7 +1872,7 @@ export default function Home() {
                 </div>
 
                 {/* Live Scoreboard */}
-                <div className="flex items-center justify-around py-4 bg-slate-900 text-white rounded-2xl shadow-inner text-center">
+                <div className="flex items-center justify-around py-4 bg-slate-950 text-white rounded-2xl shadow-inner text-center">
                   <div className="flex-1">
                     <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">{getTeamLabel(activeGame.matchup.home)}</p>
                     <p className="text-4xl font-extrabold mt-1">
