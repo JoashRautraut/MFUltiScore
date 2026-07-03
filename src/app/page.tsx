@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PlayerProgressChart } from "@/components/PlayerProgressChart";
+import { fetchCompletedGames, fetchSheetPlayers, saveCompletedGame } from "@/lib/client-api";
 import { STAT_TYPES, StatType } from "@/types/stats";
 import { clearAuthUser, getAuthUser, getRegisteredPlayers, isAdmin, type AuthUser } from "@/lib/auth";
 
@@ -23,7 +24,7 @@ const USER_NAV_ITEMS: Array<[Screen, string]> = [
 ];
 
 type PersonalGameRecord = {
-  gameId: number;
+  gameId: string;
   date: string;
   endedAt: string;
   team: TeamKey;
@@ -61,7 +62,7 @@ type LogEntry = {
 };
 
 type CompletedGame = {
-  id: number;
+  id: string;
   date: string;
   endedAt: string;
   timerSeconds: number;
@@ -83,42 +84,34 @@ const TEAM_OPTIONS = Array.from({ length: 15 }, (_, index) => ({
   label: `Team ${index + 1}`,
 }));
 
-const initialCompletedGames: CompletedGame[] = [
-  {
-    id: 1,
-    date: "2026-06-28",
-    endedAt: "04:42 PM",
-    timerSeconds: 3180,
+function toCompletedGame(game: Awaited<ReturnType<typeof fetchCompletedGames>>[number]): CompletedGame {
+  const teamPlayers = createEmptyTeamPlayers();
+  for (const option of TEAM_OPTIONS) {
+    teamPlayers[option.key] = (game.teamPlayers[option.key] ?? []).map((player) => ({
+      name: player.name,
+      team: player.team as TeamKey,
+      counts: player.counts,
+    }));
+  }
+
+  return {
+    id: game.id,
+    date: game.date,
+    endedAt: game.endedAt,
+    timerSeconds: game.timerSeconds,
     matchup: {
-      home: "team1",
-      away: "team2",
+      home: game.matchup.home as TeamKey,
+      away: game.matchup.away as TeamKey,
     },
-    teamPlayers: {
-      team1: [
-        { name: "Ava", team: "team1", counts: { Block: 1, Assist: 2, Score: 2, Callahan: 0 } },
-        { name: "Mia", team: "team1", counts: { Block: 0, Assist: 1, Score: 1, Callahan: 0 } },
-      ],
-      team2: [
-        { name: "Noah", team: "team2", counts: { Block: 2, Assist: 0, Score: 1, Callahan: 0 } },
-        { name: "Kai", team: "team2", counts: { Block: 0, Assist: 1, Score: 0, Callahan: 0 } },
-      ],
-      team3: [],
-      team4: [],
-      team5: [],
-      team6: [],
-      team7: [],
-      team8: [],
-      team9: [],
-      team10: [],
-      team11: [],
-      team12: [],
-      team13: [],
-      team14: [],
-      team15: [],
+    teamPlayers,
+    bestPlayer: {
+      name: game.bestPlayer.name,
+      team: game.bestPlayer.team as TeamKey,
+      percentage: game.bestPlayer.percentage,
+      points: game.bestPlayer.points,
     },
-    bestPlayer: { name: "Ava", team: "team1", percentage: 38, points: 7 },
-  },
-];
+  };
+}
 
 function emptyCounts(): Record<StatType, number> {
   return { Block: 0, Assist: 0, Score: 0, Callahan: 0 };
@@ -237,7 +230,11 @@ export default function Home() {
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
-  const [completedGames, setCompletedGames] = useState<CompletedGame[]>(initialCompletedGames);
+  const [completedGames, setCompletedGames] = useState<CompletedGame[]>([]);
+  const [isLoadingGames, setIsLoadingGames] = useState(true);
+  const [gamesLoadError, setGamesLoadError] = useState("");
+  const [isSavingGame, setIsSavingGame] = useState(false);
+  const [saveGameError, setSaveGameError] = useState("");
 
   const configuredDurationSeconds = useMemo(
     () => Math.max(gameDurationMinutes, 1) * 60,
@@ -272,6 +269,76 @@ export default function Home() {
 
     setIsAuthChecking(false);
   }, [router]);
+
+  useEffect(() => {
+    if (isAuthChecking) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadData() {
+      setIsLoadingGames(true);
+      setGamesLoadError("");
+
+      try {
+        const [games, sheetPlayers] = await Promise.all([
+          fetchCompletedGames(),
+          fetchSheetPlayers(),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setCompletedGames(games.map(toCompletedGame));
+
+        const registeredPlayers = getRegisteredPlayers();
+        const sheetPlayerNames = new Set(sheetPlayers.map((player) => player.name));
+        const mergedNames = new Set([
+          ...registeredPlayers.map((player) => player.name),
+          ...sheetPlayers.map((player) => player.name),
+        ]);
+
+        setPlayerAssignments((current) => {
+          const next: Record<string, TeamKey | null> = {};
+          for (const name of mergedNames) {
+            next[name] = current[name] ?? null;
+          }
+          return next;
+        });
+
+        setPlayerGenders((current) => {
+          const next: Record<string, PlayerGender> = { ...current };
+          for (const player of registeredPlayers) {
+            next[player.name] = player.gender;
+          }
+          for (const name of sheetPlayerNames) {
+            if (!next[name]) {
+              next[name] = "male";
+            }
+          }
+          return next;
+        });
+      } catch (error) {
+        if (!cancelled) {
+          setGamesLoadError(
+            error instanceof Error ? error.message : "Failed to load data from Google Sheets.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingGames(false);
+        }
+      }
+    }
+
+    void loadData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthChecking]);
 
   const userIsAdmin = isAdmin(authUser);
   const navItems = userIsAdmin ? ADMIN_NAV_ITEMS : USER_NAV_ITEMS;
@@ -510,7 +577,7 @@ export default function Home() {
     const rankIndex = genderRanking.findIndex((player) => player.name === playerName);
 
     return {
-      gameHistory: [...gameHistory].sort((a, b) => b.gameId - a.gameId),
+      gameHistory: [...gameHistory].sort((a, b) => b.date.localeCompare(a.date)),
       gamesPlayed: gameHistory.length,
       totalPoints,
       statsTotals,
@@ -605,36 +672,51 @@ export default function Home() {
     setScreen("summary");
   }
 
-  function saveGame() {
+  async function saveGame() {
     if (!userIsAdmin) {
       return;
     }
 
-    setCompletedGames((current) => [
-      {
-        id: Date.now(),
-        date,
-        endedAt: formatClockTime(new Date()),
-        timerSeconds: elapsedSeconds,
-        matchup,
-        teamPlayers,
-        bestPlayer: getBestPlayer(
-          TEAM_OPTIONS.reduce(
-            (acc, option) => {
-              acc[option.key] =
-                matchup.home === option.key || matchup.away === option.key
-                  ? teamPlayers[option.key]
-                  : [];
-              return acc;
-            },
-            createEmptyTeamPlayers(),
-          ),
-        ),
+    const matchupPlayers = TEAM_OPTIONS.reduce(
+      (acc, option) => {
+        acc[option.key] =
+          matchup.home === option.key || matchup.away === option.key
+            ? teamPlayers[option.key]
+            : [];
+        return acc;
       },
-      ...current,
-    ]);
+      createEmptyTeamPlayers(),
+    );
+    const bestPlayer = getBestPlayer(matchupPlayers);
+    const endedAt = formatClockTime(new Date());
+    const matchupLabel = `${getTeamLabel(matchup.home)} vs ${getTeamLabel(matchup.away)}`;
 
-    setScreen("summary");
+    setIsSavingGame(true);
+    setSaveGameError("");
+
+    try {
+      const savedGame = await saveCompletedGame({
+        date,
+        endedAt,
+        timerSeconds: elapsedSeconds,
+        matchup: {
+          home: matchup.home,
+          away: matchup.away,
+        },
+        teamPlayers: matchupPlayers,
+        bestPlayer,
+        matchupLabel,
+      });
+
+      setCompletedGames((current) => [toCompletedGame(savedGame), ...current]);
+      setScreen("summary");
+    } catch (error) {
+      setSaveGameError(
+        error instanceof Error ? error.message : "Failed to save game to Google Sheets.",
+      );
+    } finally {
+      setIsSavingGame(false);
+    }
   }
 
   function renderSetupPlayerRow(player: string) {
@@ -1244,11 +1326,15 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={saveGame}
-                    className="rounded-2xl bg-blue-600 px-5 py-3 font-medium text-white"
+                    disabled={isSavingGame}
+                    className="rounded-2xl bg-blue-600 px-5 py-3 font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
                   >
-                    Save summary record
+                    {isSavingGame ? "Saving to Google Sheets..." : "Save summary record"}
                   </button>
                 </div>
+                {saveGameError && (
+                  <p className="text-sm text-red-600">{saveGameError}</p>
+                )}
               </>
             ) : (
               <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1270,6 +1356,17 @@ export default function Home() {
                 </p>
               </div>
               <div className="divide-y divide-slate-200">
+                {isLoadingGames && (
+                  <div className="px-5 py-8 text-sm text-slate-500">Loading saved games from Google Sheets...</div>
+                )}
+                {!isLoadingGames && gamesLoadError && (
+                  <div className="px-5 py-8 text-sm text-red-600">{gamesLoadError}</div>
+                )}
+                {!isLoadingGames && !gamesLoadError && completedGames.length === 0 && (
+                  <div className="px-5 py-8 text-sm text-slate-500">
+                    No saved games yet. Play a game and save it to store data in Google Sheets.
+                  </div>
+                )}
                 {completedGames.map((game) => (
                   <details key={game.id} className="group px-5 py-4" open>
                     <summary className="grid cursor-pointer list-none gap-4 md:grid-cols-4">

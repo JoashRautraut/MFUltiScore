@@ -1,7 +1,7 @@
 import { STAT_TYPES, StatType } from "@/types/stats";
 
 type GameChartEntry = {
-  gameId: number;
+  gameId: string;
   date: string;
   points: number;
   counts: Record<StatType, number>;
@@ -38,7 +38,7 @@ function formatShortDate(date: string) {
 }
 
 export function PlayerProgressChart({ games }: PlayerProgressChartProps) {
-  const chronologicalGames = [...games].sort((a, b) => a.gameId - b.gameId);
+  const chronologicalGames = [...games].sort((a, b) => a.date.localeCompare(b.date));
   const maxPoints = Math.max(1, ...chronologicalGames.map((game) => game.points));
   const axisTicks = [maxPoints, Math.round(maxPoints / 2), 0];
   const chartWidth =

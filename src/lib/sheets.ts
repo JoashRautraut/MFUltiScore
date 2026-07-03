@@ -24,12 +24,28 @@ function assertEnvVars() {
   }
 }
 
+function normalizePrivateKey(raw: string | undefined) {
+  if (!raw) {
+    throw new Error("Missing GOOGLE_PRIVATE_KEY");
+  }
+
+  let key = raw.trim();
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1);
+  }
+
+  return key.replace(/\\n/g, "\n");
+}
+
 function getSheetsClient(): sheets_v4.Sheets {
   assertEnvVars();
 
   const auth = new google.auth.JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    key: normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY),
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
 
@@ -189,6 +205,38 @@ export async function appendStat(input: {
   });
 
   return entry;
+}
+
+export async function appendStatsBatch(
+  entries: Array<{
+    gameId: string;
+    playerName: string;
+    statType: StatType;
+    timestamp?: string;
+  }>,
+): Promise<void> {
+  if (entries.length === 0) {
+    return;
+  }
+
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+  const timestamp = new Date().toISOString();
+
+  const values = entries.map((entry) => [
+    randomUUID(),
+    entry.gameId.trim(),
+    entry.playerName.trim(),
+    entry.statType,
+    entry.timestamp ?? timestamp,
+  ]);
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.stats}!A:E`,
+    valueInputOption: "RAW",
+    requestBody: { values },
+  });
 }
 
 export async function getAllStats(): Promise<StatEntry[]> {
