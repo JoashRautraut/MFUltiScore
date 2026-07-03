@@ -1,0 +1,230 @@
+import "server-only";
+
+import { randomUUID } from "node:crypto";
+import { google, sheets_v4 } from "googleapis";
+import { Game, Player, STAT_TYPES, StatEntry, StatType } from "@/types/stats";
+
+const SHEET_NAMES = {
+  players: "Players",
+  games: "Games",
+  stats: "Stats",
+} as const;
+
+const REQUIRED_ENV_VARS = [
+  "GOOGLE_SERVICE_ACCOUNT_EMAIL",
+  "GOOGLE_PRIVATE_KEY",
+  "GOOGLE_SPREADSHEET_ID",
+] as const;
+
+function assertEnvVars() {
+  for (const key of REQUIRED_ENV_VARS) {
+    if (!process.env[key]) {
+      throw new Error(`Missing required env var: ${key}`);
+    }
+  }
+}
+
+function getSheetsClient(): sheets_v4.Sheets {
+  assertEnvVars();
+
+  const auth = new google.auth.JWT({
+    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+
+  return google.sheets({ version: "v4", auth });
+}
+
+function getSpreadsheetId() {
+  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  if (!spreadsheetId) {
+    throw new Error("Missing GOOGLE_SPREADSHEET_ID");
+  }
+  return spreadsheetId;
+}
+
+function toPlayerRow([playerId = "", name = "", dateAdded = ""]: string[]): Player {
+  return { playerId, name, dateAdded };
+}
+
+function toGameRow([gameId = "", date = "", opponent = "", location = ""]: string[]): Game {
+  return { gameId, date, opponent, location };
+}
+
+function toStatRow(
+  [statId = "", gameId = "", playerName = "", statType = "", timestamp = ""]: string[],
+): StatEntry {
+  if (!STAT_TYPES.includes(statType as StatType)) {
+    throw new Error(`Invalid stat type in sheet row: "${statType}"`);
+  }
+
+  return {
+    statId,
+    gameId,
+    playerName,
+    statType: statType as StatType,
+    timestamp,
+  };
+}
+
+export async function getPlayers(): Promise<Player[]> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SHEET_NAMES.players}!A2:C`,
+  });
+
+  const rows = (response.data.values ?? []) as string[][];
+  return rows.filter((row) => row[0] && row[1]).map(toPlayerRow);
+}
+
+export async function addPlayer(name: string): Promise<Player> {
+  const normalizedName = name.trim();
+  if (!normalizedName) {
+    throw new Error("Player name is required.");
+  }
+
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const player: Player = {
+    playerId: randomUUID(),
+    name: normalizedName,
+    dateAdded: new Date().toISOString(),
+  };
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.players}!A:C`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [[player.playerId, player.name, player.dateAdded]],
+    },
+  });
+
+  return player;
+}
+
+export async function createGame(input: {
+  date: string;
+  opponent: string;
+  location?: string;
+}): Promise<Game> {
+  const date = input.date.trim();
+  const opponent = input.opponent.trim();
+  const location = input.location?.trim() ?? "";
+
+  if (!date || !opponent) {
+    throw new Error("Game date and opponent are required.");
+  }
+
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const game: Game = {
+    gameId: randomUUID(),
+    date,
+    opponent,
+    location,
+  };
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.games}!A:D`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [[game.gameId, game.date, game.opponent, game.location]],
+    },
+  });
+
+  return game;
+}
+
+export async function appendStat(input: {
+  gameId: string;
+  playerName: string;
+  statType: StatType;
+  timestamp?: string;
+}): Promise<StatEntry> {
+  const gameId = input.gameId.trim();
+  const playerName = input.playerName.trim();
+
+  if (!gameId || !playerName) {
+    throw new Error("Game ID and player name are required.");
+  }
+
+  if (!STAT_TYPES.includes(input.statType)) {
+    throw new Error(`Unsupported stat type "${input.statType}".`);
+  }
+
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const entry: StatEntry = {
+    statId: randomUUID(),
+    gameId,
+    playerName,
+    statType: input.statType,
+    timestamp: input.timestamp ?? new Date().toISOString(),
+  };
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.stats}!A:E`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [
+        [
+          entry.statId,
+          entry.gameId,
+          entry.playerName,
+          entry.statType,
+          entry.timestamp,
+        ],
+      ],
+    },
+  });
+
+  return entry;
+}
+
+export async function getAllStats(): Promise<StatEntry[]> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SHEET_NAMES.stats}!A2:E`,
+  });
+
+  const rows = (response.data.values ?? []) as string[][];
+  return rows
+    .filter((row) => row[0] && row[1] && row[2] && row[3] && row[4])
+    .map(toStatRow);
+}
+
+export async function getGameStats(gameId: string): Promise<StatEntry[]> {
+  const trimmedGameId = gameId.trim();
+  if (!trimmedGameId) {
+    throw new Error("Game ID is required.");
+  }
+
+  const allStats = await getAllStats();
+  return allStats.filter((entry) => entry.gameId === trimmedGameId);
+}
+
+export async function getGames(): Promise<Game[]> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SHEET_NAMES.games}!A2:D`,
+  });
+
+  const rows = (response.data.values ?? []) as string[][];
+  return rows.filter((row) => row[0] && row[1] && row[2]).map(toGameRow);
+}
