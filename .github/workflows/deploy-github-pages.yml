@@ -28,25 +28,23 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: mfultiscore-app/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: mfultiscore-app
         run: npm ci
 
       - name: Build static site
-        working-directory: mfultiscore-app
         run: npm run build:github
         env:
           GITHUB_PAGES: "true"
 
       - name: Verify build output
-        run: ls -la mfultiscore-app/out
+        run: ls -la out
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: mfultiscore-app/out
+          path: out
 
   deploy:
     needs: build
