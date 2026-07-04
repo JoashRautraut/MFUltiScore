@@ -721,16 +721,18 @@ export default function Home() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 {STAT_TYPES.map((statType) => (
                   <button
                     key={statType}
                     type="button"
                     onClick={() => addStat(player.name, team, statType)}
-                    className={`rounded-2xl px-4 py-4 text-left text-white transition hover:opacity-90 ${accent.strong}`}
+                    className={`rounded-2xl px-4 py-5 text-left text-white transition hover:opacity-90 sm:py-6 ${accent.strong}`}
                   >
-                    <span className="block text-sm text-slate-300">{statType}</span>
-                    <span className="mt-1 block text-2xl font-semibold">{player.counts[statType]}</span>
+                    <span className="block text-sm font-medium text-white/80 sm:text-base">{statType}</span>
+                    <span className="mt-1 block text-3xl font-bold tabular-nums sm:text-4xl">
+                      {player.counts[statType]}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1089,9 +1091,6 @@ export default function Home() {
                     {getTeamLabel(matchup.home)} vs {getTeamLabel(matchup.away)}
                   </h2>
                   <p className="mt-1 text-sm text-slate-600">{date}</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-800">
-                    Score: {matchupScore.home} - {matchupScore.away}
-                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -1122,6 +1121,44 @@ export default function Home() {
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-4">
+              {(() => {
+                const homeAccent = getTeamAccent(matchup.home);
+                const awayAccent = getTeamAccent(matchup.away);
+                return (
+                  <>
+                    <div
+                      className={`rounded-3xl border-2 p-5 text-center shadow-sm sm:p-6 ${homeAccent.ring} ${homeAccent.soft}`}
+                    >
+                      <p className={`text-sm font-semibold uppercase tracking-wide sm:text-base ${homeAccent.label}`}>
+                        {getTeamLabel(matchup.home)}
+                      </p>
+                      <p className="mt-2 text-6xl font-bold tabular-nums text-slate-900 sm:text-7xl">
+                        {matchupScore.home}
+                      </p>
+                      <p className="mt-2 text-sm font-medium text-slate-500">Goals (Score)</p>
+                    </div>
+
+                    <div className="px-1 text-center">
+                      <span className="text-2xl font-bold text-slate-400 sm:text-3xl">VS</span>
+                    </div>
+
+                    <div
+                      className={`rounded-3xl border-2 p-5 text-center shadow-sm sm:p-6 ${awayAccent.ring} ${awayAccent.soft}`}
+                    >
+                      <p className={`text-sm font-semibold uppercase tracking-wide sm:text-base ${awayAccent.label}`}>
+                        {getTeamLabel(matchup.away)}
+                      </p>
+                      <p className="mt-2 text-6xl font-bold tabular-nums text-slate-900 sm:text-7xl">
+                        {matchupScore.away}
+                      </p>
+                      <p className="mt-2 text-sm font-medium text-slate-500">Goals (Score)</p>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
               <div className="grid gap-4 xl:grid-cols-[1.6fr_0.8fr]">
