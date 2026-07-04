@@ -217,7 +217,7 @@ export default function Home() {
   const [authUser, setAuthUserState] = useState<AuthUser | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [screen, setScreen] = useState<Screen>("setup");
-  const [date, setDate] = useState("2026-07-02");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [gameDurationMinutes, setGameDurationMinutes] = useState(20);
   const [playerSearch, setPlayerSearch] = useState("");
   const [matchup, setMatchup] = useState<{ home: TeamKey; away: TeamKey }>({
@@ -275,13 +275,22 @@ export default function Home() {
           return;
         }
 
-        setCompletedGames(games.map(toCompletedGame));
+        const gamesMapped = games.map(toCompletedGame);
+        setCompletedGames(gamesMapped);
 
         const registeredPlayers = toRegisteredPlayers(registeredUsers);
-        const sheetPlayerNames = new Set(sheetPlayers.map((player) => player.name));
+        const historicalPlayerNames = new Set<string>();
+
+        for (const game of gamesMapped) {
+          for (const player of flattenPlayers(game.teamPlayers)) {
+            historicalPlayerNames.add(player.name);
+          }
+        }
+
         const mergedNames = new Set([
-          ...registeredPlayers.map((player) => player.name),
           ...sheetPlayers.map((player) => player.name),
+          ...historicalPlayerNames,
+          ...registeredPlayers.map((player) => player.name),
         ]);
 
         setPlayerAssignments((current) => {
@@ -294,14 +303,21 @@ export default function Home() {
 
         setPlayerGenders((current) => {
           const next: Record<string, PlayerGender> = { ...current };
+
+          for (const player of sheetPlayers) {
+            next[player.name] = player.gender;
+          }
+
           for (const player of registeredPlayers) {
             next[player.name] = player.gender;
           }
-          for (const name of sheetPlayerNames) {
+
+          for (const name of mergedNames) {
             if (!next[name]) {
               next[name] = "male";
             }
           }
+
           return next;
         });
       } catch (error) {
@@ -580,7 +596,7 @@ export default function Home() {
     }));
   }
 
-  function startMockGame() {
+  function startLiveGame() {
     const nextTeamPlayers = createEmptyTeamPlayers();
     for (const key of matchupTeams) {
       nextTeamPlayers[key] = teamSelections[key].map((name) => createPlayer(name, key));
@@ -956,7 +972,7 @@ export default function Home() {
                 <p className="text-sm font-medium text-slate-500">Step 1</p>
                 <h2 className="mt-1 text-2xl font-semibold text-slate-900">Prepare the game</h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  Registered users are added as players automatically. Assign each player to a team, or leave them unassigned.
+                  Registered players are added to the roster automatically. Assign each player to a team, or leave them unassigned.
                 </p>
               </div>
 
@@ -1071,7 +1087,7 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={startMockGame}
+                onClick={startLiveGame}
                 disabled={matchup.home === matchup.away}
                 className="w-full rounded-3xl bg-blue-600 px-5 py-4 text-lg font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
               >
@@ -1102,7 +1118,7 @@ export default function Home() {
                   <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
                     {playerSearch.trim()
                       ? "No players match your search."
-                      : "No registered players yet. Create an account to be added as a player."}
+                      : "No players in the roster yet. Register an account or add players to the Players sheet."}
                   </div>
                 ) : (
                   <>

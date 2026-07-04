@@ -1,7 +1,7 @@
 import "server-only";
 
 import { AuthUser, PlayerGender, PublicUser, UserRole } from "@/types/auth";
-import { addPlayer, addUser, getPlayers, getUsers, removeUserByUsername } from "@/lib/sheets";
+import { addUser, ensurePlayerRoster, getUsers, removeUserByUsername } from "@/lib/sheets";
 
 function normalizeUsername(username: string) {
   return username.trim().toLowerCase();
@@ -60,15 +60,8 @@ function validateRegistrationInput(input: {
   return { username, password, playerName };
 }
 
-async function ensurePlayerExists(playerName: string) {
-  const players = await getPlayers();
-  const normalizedName = playerName.trim().toLowerCase();
-
-  if (players.some((player) => player.name.trim().toLowerCase() === normalizedName)) {
-    return;
-  }
-
-  await addPlayer(playerName);
+async function ensurePlayerExists(playerName: string, gender: PlayerGender = "male") {
+  await ensurePlayerRoster(playerName, gender);
 }
 
 export async function listPublicUsers(): Promise<PublicUser[]> {
@@ -92,7 +85,7 @@ export async function registerSheetUser(input: {
     role,
   });
 
-  await ensurePlayerExists(validated.playerName);
+  await ensurePlayerExists(validated.playerName, input.gender);
 
   return toAuthUser(user);
 }
@@ -160,5 +153,6 @@ export async function removeSheetUser(input: {
     throw new Error("Cannot remove the last admin account.");
   }
 
+  await ensurePlayerExists(targetUser.playerName, targetUser.gender);
   await removeUserByUsername(input.targetUsername);
 }

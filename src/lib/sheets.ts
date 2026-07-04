@@ -70,8 +70,9 @@ function cleanCell(value = "") {
 }
 
 function toPlayerRow(row: string[]): Player {
-  const [playerId = "", name = "", dateAdded = ""] = row.map(cleanCell);
-  return { playerId, name, dateAdded };
+  const [playerId = "", name = "", dateAdded = "", gender = ""] = row.map(cleanCell);
+  const normalizedGender: PlayerGender = gender === "female" ? "female" : "male";
+  return { playerId, name, dateAdded, gender: normalizedGender };
 }
 
 function toGameRow(row: string[]): Game {
@@ -102,14 +103,14 @@ export async function getPlayers(): Promise<Player[]> {
 
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${SHEET_NAMES.players}!A2:C`,
+    range: `${SHEET_NAMES.players}!A2:D`,
   });
 
   const rows = (response.data.values ?? []) as string[][];
   return rows.filter((row) => row[0] && row[1]).map(toPlayerRow);
 }
 
-export async function addPlayer(name: string): Promise<Player> {
+export async function addPlayer(name: string, gender: PlayerGender = "male"): Promise<Player> {
   const normalizedName = name.trim();
   if (!normalizedName) {
     throw new Error("Player name is required.");
@@ -122,18 +123,38 @@ export async function addPlayer(name: string): Promise<Player> {
     playerId: randomUUID(),
     name: normalizedName,
     dateAdded: new Date().toISOString(),
+    gender,
   };
 
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${SHEET_NAMES.players}!A:C`,
+    range: `${SHEET_NAMES.players}!A:D`,
     valueInputOption: "RAW",
     requestBody: {
-      values: [[player.playerId, player.name, player.dateAdded]],
+      values: [[player.playerId, player.name, player.dateAdded, player.gender]],
     },
   });
 
   return player;
+}
+
+export async function ensurePlayerRoster(name: string, gender: PlayerGender = "male"): Promise<Player> {
+  const normalizedName = name.trim();
+  if (!normalizedName) {
+    throw new Error("Player name is required.");
+  }
+
+  const players = await getPlayers();
+  const normalizedTarget = normalizedName.toLowerCase();
+  const existing = players.find(
+    (player) => player.name.trim().toLowerCase() === normalizedTarget,
+  );
+
+  if (existing) {
+    return existing;
+  }
+
+  return addPlayer(normalizedName, gender);
 }
 
 export async function createGame(input: {

@@ -62,7 +62,7 @@ export default function AdminPage() {
     }
 
     const confirmed = window.confirm(
-      `Remove account "${targetUsername}"? This cannot be undone.`,
+      `Remove login for "${targetUsername}"? Their player profile will stay in the roster for game setup.`,
     );
     if (!confirmed) {
       return;
