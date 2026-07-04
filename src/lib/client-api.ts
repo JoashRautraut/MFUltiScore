@@ -1,3 +1,4 @@
+import { AuthUser, PlayerGender, PublicUser, UserRole } from "@/types/auth";
 import { Player } from "@/types/stats";
 import { SaveCompletedGameInput, SerializedCompletedGame } from "@/types/completed-game";
 
@@ -41,4 +42,48 @@ export async function saveCompletedGame(
   });
   const body = await parseJsonResponse<{ game: SerializedCompletedGame }>(response);
   return body.game;
+}
+
+export async function fetchRegisteredUsers(): Promise<PublicUser[]> {
+  const response = await fetch("/api/users");
+  const body = await parseJsonResponse<{ users: PublicUser[] }>(response);
+  return body.users;
+}
+
+export async function registerAccount(input: {
+  username: string;
+  password: string;
+  playerName: string;
+  gender: PlayerGender;
+  role?: UserRole;
+}): Promise<AuthUser> {
+  const response = await fetch("/api/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = await parseJsonResponse<{ user: AuthUser }>(response);
+  return body.user;
+}
+
+export async function loginAccount(username: string, password: string): Promise<AuthUser> {
+  const response = await fetch("/api/users/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  const body = await parseJsonResponse<{ user: AuthUser }>(response);
+  return body.user;
+}
+
+export async function removeAccount(input: {
+  targetUsername: string;
+  actingUsername: string;
+}): Promise<void> {
+  const response = await fetch("/api/users/remove", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await parseJsonResponse<{ ok: true }>(response);
 }

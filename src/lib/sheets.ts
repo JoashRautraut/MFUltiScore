@@ -2,13 +2,18 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { google, sheets_v4 } from "googleapis";
+import { PlayerGender, RegisteredUser, UserRole } from "@/types/auth";
 import { Game, Player, STAT_TYPES, StatEntry, StatType } from "@/types/stats";
 
 const SHEET_NAMES = {
   players: "Players",
   games: "Games",
   stats: "Stats",
+  users: "Users",
 } as const;
+
+const USER_ROLES: UserRole[] = ["user", "admin"];
+const PLAYER_GENDERS: PlayerGender[] = ["male", "female"];
 
 const REQUIRED_ENV_VARS = [
   "GOOGLE_SERVICE_ACCOUNT_EMAIL",
@@ -275,4 +280,157 @@ export async function getGames(): Promise<Game[]> {
 
   const rows = (response.data.values ?? []) as string[][];
   return rows.filter((row) => row[0] && row[1] && row[2]).map(toGameRow);
+}
+
+function toUserRow(
+  [
+    userId = "",
+    username = "",
+    password = "",
+    playerName = "",
+    gender = "",
+    role = "",
+    dateAdded = "",
+  ]: string[],
+): RegisteredUser {
+  if (!USER_ROLES.includes(role as UserRole)) {
+    throw new Error(`Invalid role in sheet row: "${role}"`);
+  }
+
+  if (!PLAYER_GENDERS.includes(gender as PlayerGender)) {
+    throw new Error(`Invalid gender in sheet row: "${gender}"`);
+  }
+
+  return {
+    userId,
+    username,
+    password,
+    playerName,
+    gender: gender as PlayerGender,
+    role: role as UserRole,
+    dateAdded,
+  };
+}
+
+async function getSheetId(sheetName: string): Promise<number> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const response = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheet = response.data.sheets?.find((entry) => entry.properties?.title === sheetName);
+
+  if (sheet?.properties?.sheetId === undefined || sheet.properties.sheetId === null) {
+    throw new Error(
+      `Sheet tab "${sheetName}" not found. Add a "${sheetName}" tab with the correct headers.`,
+    );
+  }
+
+  return sheet.properties.sheetId;
+}
+
+export async function getUsers(): Promise<RegisteredUser[]> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SHEET_NAMES.users}!A2:G`,
+  });
+
+  const rows = (response.data.values ?? []) as string[][];
+  return rows.filter((row) => row[0] && row[1] && row[2]).map(toUserRow);
+}
+
+export async function addUser(input: {
+  username: string;
+  password: string;
+  playerName: string;
+  gender: PlayerGender;
+  role: UserRole;
+}): Promise<RegisteredUser> {
+  const username = input.username.trim();
+  const password = input.password.trim();
+  const playerName = input.playerName.trim();
+
+  if (!username || !password || !playerName) {
+    throw new Error("Username, password, and player name are required.");
+  }
+
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+  const existingUsers = await getUsers();
+  const normalizedUsername = username.toLowerCase();
+
+  if (existingUsers.some((user) => user.username.trim().toLowerCase() === normalizedUsername)) {
+    throw new Error("That username is already taken.");
+  }
+
+  const user: RegisteredUser = {
+    userId: randomUUID(),
+    username,
+    password,
+    playerName,
+    gender: input.gender,
+    role: input.role,
+    dateAdded: new Date().toISOString(),
+  };
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.users}!A:G`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [
+        [
+          user.userId,
+          user.username,
+          user.password,
+          user.playerName,
+          user.gender,
+          user.role,
+          user.dateAdded,
+        ],
+      ],
+    },
+  });
+
+  return user;
+}
+
+export async function removeUserByUsername(username: string): Promise<void> {
+  const targetUsername = username.trim().toLowerCase();
+  if (!targetUsername) {
+    throw new Error("Username is required.");
+  }
+
+  const users = await getUsers();
+  const rowIndex = users.findIndex(
+    (user) => user.username.trim().toLowerCase() === targetUsername,
+  );
+
+  if (rowIndex === -1) {
+    throw new Error("Account not found.");
+  }
+
+  const sheetId = await getSheetId(SHEET_NAMES.users);
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId,
+              dimension: "ROWS",
+              startIndex: rowIndex + 1,
+              endIndex: rowIndex + 2,
+            },
+          },
+        },
+      ],
+    },
+  });
 }

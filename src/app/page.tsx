@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PlayerProgressChart } from "@/components/PlayerProgressChart";
-import { fetchCompletedGames, fetchSheetPlayers, saveCompletedGame } from "@/lib/client-api";
+import { fetchCompletedGames, fetchRegisteredUsers, fetchSheetPlayers, saveCompletedGame } from "@/lib/client-api";
 import { STAT_TYPES, StatType } from "@/types/stats";
-import { clearAuthUser, getAuthUser, getRegisteredPlayers, isAdmin, type AuthUser } from "@/lib/auth";
+import { clearAuthUser, getAuthUser, isAdmin, toRegisteredPlayers, type AuthUser } from "@/lib/auth";
 
 type Screen = "setup" | "live" | "summary" | "dashboard" | "profile";
 
@@ -250,23 +250,6 @@ export default function Home() {
 
     setAuthUserState(user);
     setScreen(isAdmin(user) ? "setup" : "summary");
-
-    const registeredPlayers = getRegisteredPlayers();
-    setPlayerAssignments((current) => {
-      const next: Record<string, TeamKey | null> = {};
-      for (const player of registeredPlayers) {
-        next[player.name] = current[player.name] ?? null;
-      }
-      return next;
-    });
-    setPlayerGenders(() => {
-      const next: Record<string, PlayerGender> = {};
-      for (const player of registeredPlayers) {
-        next[player.name] = player.gender;
-      }
-      return next;
-    });
-
     setIsAuthChecking(false);
   }, [router]);
 
@@ -282,9 +265,10 @@ export default function Home() {
       setGamesLoadError("");
 
       try {
-        const [games, sheetPlayers] = await Promise.all([
+        const [games, sheetPlayers, registeredUsers] = await Promise.all([
           fetchCompletedGames(),
           fetchSheetPlayers(),
+          fetchRegisteredUsers(),
         ]);
 
         if (cancelled) {
@@ -293,7 +277,7 @@ export default function Home() {
 
         setCompletedGames(games.map(toCompletedGame));
 
-        const registeredPlayers = getRegisteredPlayers();
+        const registeredPlayers = toRegisteredPlayers(registeredUsers);
         const sheetPlayerNames = new Set(sheetPlayers.map((player) => player.name));
         const mergedNames = new Set([
           ...registeredPlayers.map((player) => player.name),

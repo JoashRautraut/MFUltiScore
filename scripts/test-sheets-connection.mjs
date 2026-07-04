@@ -57,12 +57,19 @@ try {
   console.log("Google auth: SUCCESS");
 
   const sheets = google.sheets({ version: "v4", auth });
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: "Players!A1:C1",
-  });
+  const [usersResponse, playersResponse] = await Promise.all([
+    sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: "Users!A1:G1",
+    }),
+    sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: "Players!A1:C1",
+    }),
+  ]);
 
-  console.log("Sheet headers:", response.data.values?.[0] ?? "(empty)");
+  console.log("Users headers:", usersResponse.data.values?.[0] ?? "(empty — add Users tab)");
+  console.log("Players headers:", playersResponse.data.values?.[0] ?? "(empty)");
   console.log("Google Sheets connection is working.");
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);

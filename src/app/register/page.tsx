@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getAuthUser, PlayerGender, registerUser } from "@/lib/auth";
+import { getAuthUser, PlayerGender } from "@/lib/auth";
+import { registerAccount } from "@/lib/client-api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -24,31 +25,25 @@ export default function RegisterPage() {
     setIsCheckingSession(false);
   }, [router]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-
-    const result = registerUser({
-      username,
-      password,
-      playerName,
-      gender,
-    });
-
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-
     setIsSubmitting(true);
 
-    void fetch("/api/players", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: playerName.trim() }),
-    }).catch(() => {});
-
-    router.push("/login?registered=1");
+    try {
+      await registerAccount({
+        username,
+        password,
+        playerName,
+        gender,
+      });
+      router.push("/login?registered=1");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Failed to create account.",
+      );
+      setIsSubmitting(false);
+    }
   }
 
   if (isCheckingSession) {

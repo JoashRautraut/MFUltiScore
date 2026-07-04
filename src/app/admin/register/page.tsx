@@ -7,8 +7,8 @@ import {
   getAuthUser,
   isAdminRegisterUnlocked,
   PlayerGender,
-  registerAdminUser,
 } from "@/lib/auth";
+import { registerAccount } from "@/lib/client-api";
 
 export default function AdminRegisterPage() {
   const router = useRouter();
@@ -34,24 +34,26 @@ export default function AdminRegisterPage() {
     setIsCheckingAccess(false);
   }, [router]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-
-    const result = registerAdminUser({
-      username,
-      password,
-      playerName,
-      gender,
-    });
-
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-
     setIsSubmitting(true);
-    router.push("/login?adminRegistered=1");
+
+    try {
+      await registerAccount({
+        username,
+        password,
+        playerName,
+        gender,
+        role: "admin",
+      });
+      router.push("/login?adminRegistered=1");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : "Failed to create admin account.",
+      );
+      setIsSubmitting(false);
+    }
   }
 
   if (isCheckingAccess) {

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getAuthUser, loginUser, setAuthUser, unlockAdminRegister } from "@/lib/auth";
+import { getAuthUser, setAuthUser, unlockAdminRegister } from "@/lib/auth";
+import { loginAccount } from "@/lib/client-api";
 
 function LoginForm() {
   const router = useRouter();
@@ -27,19 +28,19 @@ function LoginForm() {
     setIsCheckingSession(false);
   }, [router]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-
-    const result = loginUser(username, password);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-
     setIsSubmitting(true);
-    setAuthUser(result.user);
-    router.push("/");
+
+    try {
+      const user = await loginAccount(username, password);
+      setAuthUser(user);
+      router.push("/");
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Failed to sign in.");
+      setIsSubmitting(false);
+    }
   }
 
   function handleDontClick() {
