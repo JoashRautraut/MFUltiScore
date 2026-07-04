@@ -65,17 +65,24 @@ function getSpreadsheetId() {
   return spreadsheetId;
 }
 
-function toPlayerRow([playerId = "", name = "", dateAdded = ""]: string[]): Player {
+function cleanCell(value = "") {
+  return value.replace(/\r/g, "").trim();
+}
+
+function toPlayerRow(row: string[]): Player {
+  const [playerId = "", name = "", dateAdded = ""] = row.map(cleanCell);
   return { playerId, name, dateAdded };
 }
 
-function toGameRow([gameId = "", date = "", opponent = "", location = ""]: string[]): Game {
+function toGameRow(row: string[]): Game {
+  const [gameId = "", date = "", opponent = "", location = ""] = row.map(cleanCell);
   return { gameId, date, opponent, location };
 }
 
-function toStatRow(
-  [statId = "", gameId = "", playerName = "", statType = "", timestamp = ""]: string[],
-): StatEntry {
+function toStatRow(row: string[]): StatEntry {
+  const [statId = "", gameId = "", playerName = "", statType = "", timestamp = ""] =
+    row.map(cleanCell);
+
   if (!STAT_TYPES.includes(statType as StatType)) {
     throw new Error(`Invalid stat type in sheet row: "${statType}"`);
   }
@@ -282,8 +289,8 @@ export async function getGames(): Promise<Game[]> {
   return rows.filter((row) => row[0] && row[1] && row[2]).map(toGameRow);
 }
 
-function toUserRow(
-  [
+function toUserRow(row: string[]): RegisteredUser {
+  const [
     userId = "",
     username = "",
     password = "",
@@ -291,8 +298,7 @@ function toUserRow(
     gender = "",
     role = "",
     dateAdded = "",
-  ]: string[],
-): RegisteredUser {
+  ] = row.map(cleanCell);
   if (!USER_ROLES.includes(role as UserRole)) {
     throw new Error(`Invalid role in sheet row: "${role}"`);
   }

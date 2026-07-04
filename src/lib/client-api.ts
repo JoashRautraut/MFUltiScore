@@ -3,10 +3,27 @@ import { Player } from "@/types/stats";
 import { SaveCompletedGameInput, SerializedCompletedGame } from "@/types/completed-game";
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
-  const body = (await response.json()) as T & { error?: string };
+  const raw = await response.text();
+  let body: T & { error?: string };
+
+  try {
+    body = JSON.parse(raw) as T & { error?: string };
+  } catch {
+    if (raw.trimStart().startsWith("<!DOCTYPE") || raw.trimStart().startsWith("<html")) {
+      throw new Error(
+        response.status === 404
+          ? "API route not found. Stop the dev server, run npm run dev again from the MFULTISCORE folder, then retry."
+          : `Server returned HTML instead of JSON (${response.status}). Restart npm run dev and try again.`,
+      );
+    }
+
+    throw new Error(`Unexpected server response (${response.status}).`);
+  }
+
   if (!response.ok) {
     throw new Error(body.error ?? `Request failed (${response.status}).`);
   }
+
   return body;
 }
 

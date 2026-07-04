@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/ensure-api-routes.mjs && next dev",
     "build": "next build",
     "build:github": "node scripts/build-github-pages.mjs",
     "start": "next start",

@@ -1,12 +1,20 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, rmSync } from "node:fs";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
+import path from "node:path";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const appRoot = path.resolve(__dirname, "..");
+const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function ensureApiRoutes() {
+  spawnSync("node", ["scripts/ensure-api-routes.mjs"], {
+    cwd: appRoot,
+    stdio: "inherit",
+    shell: true,
+  });
+}
+
+ensureApiRoutes();
 const apiDir = path.join(appRoot, "src", "app", "api");
-const apiBackupDir = path.join(appRoot, "src", "app", "_api_backup");
+const apiBackupDir = path.join(appRoot, ".api-backup");
 const nextDir = path.join(appRoot, ".next");
 
 function runBuild() {
@@ -53,6 +61,12 @@ function restoreApiRoutes() {
 }
 
 let apiHidden = false;
+
+spawnSync("node", ["scripts/ensure-api-routes.mjs"], {
+  cwd: appRoot,
+  stdio: "inherit",
+  shell: true,
+});
 
 try {
   if (existsSync(nextDir)) {
