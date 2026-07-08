@@ -13,7 +13,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { name?: string; spreadsheetId?: string };
+    const body = (await request.json()) as { name?: string };
     const name = body.name?.trim();
 
     if (!name) {
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const player = await addPlayer(name, body.spreadsheetId);
+    const player = await addPlayer(name);
     return NextResponse.json({ player }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: formatSheetsError(error) }, { status: 500 });
