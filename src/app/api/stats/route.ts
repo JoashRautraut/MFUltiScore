@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { appendStat, appendStatsBatch, getAllStats, getGameStats } from "@/lib/sheets";
+import { appendStat, getAllStats, getGameStats } from "@/lib/sheets";
 import { STAT_TYPES, StatType } from "@/types/stats";
 
 export async function GET(request: NextRequest) {
@@ -16,38 +16,21 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-
-    // Check if bulk stats insert
-    if (body.stats && Array.isArray(body.stats)) {
-      const statsInput = body.stats as Array<{
-        gameId: string;
-        playerName: string;
-        statType: StatType;
-        timestamp?: string;
-      }>;
-
-      const stats = await appendStatsBatch(statsInput, body.spreadsheetId);
-      return NextResponse.json({ stats }, { status: 201 });
-    }
-
-    // Single stat insert
-    const singleBody = body as {
+    const body = (await request.json()) as {
       gameId?: string;
       playerName?: string;
       statType?: string;
       timestamp?: string;
-      spreadsheetId?: string;
     };
 
-    if (!singleBody.gameId?.trim() || !singleBody.playerName?.trim() || !singleBody.statType) {
+    if (!body.gameId?.trim() || !body.playerName?.trim() || !body.statType) {
       return NextResponse.json(
         { error: "Game ID, player name, and stat type are required." },
         { status: 400 },
       );
     }
 
-    if (!STAT_TYPES.includes(singleBody.statType as StatType)) {
+    if (!STAT_TYPES.includes(body.statType as StatType)) {
       return NextResponse.json(
         {
           error: `Invalid stat type. Allowed values: ${STAT_TYPES.join(", ")}`,
@@ -56,15 +39,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const stat = await appendStat(
-      {
-        gameId: singleBody.gameId,
-        playerName: singleBody.playerName,
-        statType: singleBody.statType as StatType,
-        timestamp: singleBody.timestamp,
-      },
-      singleBody.spreadsheetId,
-    );
+    const stat = await appendStat({
+      gameId: body.gameId,
+      playerName: body.playerName,
+      statType: body.statType as StatType,
+      timestamp: body.timestamp,
+    });
 
     return NextResponse.json({ stat }, { status: 201 });
   } catch (error) {
