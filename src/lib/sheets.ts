@@ -2,218 +2,166 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { google, sheets_v4 } from "googleapis";
+import { PlayerGender, RegisteredUser, UserRole } from "@/types/auth";
 import { Game, Player, STAT_TYPES, StatEntry, StatType } from "@/types/stats";
-import fs from "node:fs/promises";
-import path from "node:path";
-
-const DB_PATH = path.join(process.cwd(), "data", "db.json");
 
 const SHEET_NAMES = {
   players: "Players",
   games: "Games",
   stats: "Stats",
-  teams: "Teams",
+  users: "Users",
 } as const;
 
-export interface Team {
-  teamId: string;
-  name: string;
-  dateCreated: string;
-}
+const USER_ROLES: UserRole[] = ["user", "admin"];
+const PLAYER_GENDERS: PlayerGender[] = ["male", "female"];
 
-interface LocalDb {
-  players: Player[];
-  games: Game[];
-  stats: StatEntry[];
-  activeGame?: any;
-  teams: Team[];
-}
+const REQUIRED_ENV_VARS = [
+  "GOOGLE_SERVICE_ACCOUNT_EMAIL",
+  "GOOGLE_PRIVATE_KEY",
+  "GOOGLE_SPREADSHEET_ID",
+] as const;
 
-// Helper to read local JSON db
-async function readLocalDb(): Promise<LocalDb> {
-  try {
-    const data = await fs.readFile(DB_PATH, "utf-8");
-    const parsed = JSON.parse(data);
-    if (!parsed.teams) {
-      parsed.teams = [
-        { teamId: "team1", name: "Team 1", dateCreated: new Date().toISOString() },
-        { teamId: "team2", name: "Team 2", dateCreated: new Date().toISOString() },
-        { teamId: "team3", name: "Team 3", dateCreated: new Date().toISOString() },
-        { teamId: "team4", name: "Team 4", dateCreated: new Date().toISOString() },
-        { teamId: "team5", name: "Team 5", dateCreated: new Date().toISOString() },
-      ];
-      await writeLocalDb(parsed);
-    }
-    return parsed;
-  } catch (error) {
-    // Fallback: initialize database with default seed players
-    const initialDb: LocalDb = {
-      players: [
-        { playerId: "seed-1", name: "Ava", dateAdded: new Date().toISOString() },
-        { playerId: "seed-2", name: "Mia", dateAdded: new Date().toISOString() },
-        { playerId: "seed-3", name: "Noah", dateAdded: new Date().toISOString() },
-        { playerId: "seed-4", name: "Kai", dateAdded: new Date().toISOString() },
-        { playerId: "seed-5", name: "Liam", dateAdded: new Date().toISOString() },
-        { playerId: "seed-6", name: "Zoe", dateAdded: new Date().toISOString() },
-        { playerId: "seed-7", name: "Eli", dateAdded: new Date().toISOString() },
-        { playerId: "seed-8", name: "Jade", dateAdded: new Date().toISOString() },
-      ],
-      games: [],
-      stats: [],
-      activeGame: null,
-      teams: [
-        { teamId: "team1", name: "Team 1", dateCreated: new Date().toISOString() },
-        { teamId: "team2", name: "Team 2", dateCreated: new Date().toISOString() },
-        { teamId: "team3", name: "Team 3", dateCreated: new Date().toISOString() },
-        { teamId: "team4", name: "Team 4", dateCreated: new Date().toISOString() },
-        { teamId: "team5", name: "Team 5", dateCreated: new Date().toISOString() },
-      ],
-    };
-
-    await writeLocalDb(initialDb);
-    return initialDb;
-  }
-}
-
-// Helper to write local JSON db
-async function writeLocalDb(data: LocalDb): Promise<void> {
-  await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-  await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2), "utf-8");
-}
-
-// Check if Google Sheets credentials are configured on the server
-export function isGoogleSheetsConfigured(): boolean {
-  return !!(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY);
-}
-
-// Helper to ensure a specific sheet exists in the spreadsheet
-async function ensureSheetExists(
-  sheets: sheets_v4.Sheets,
-  spreadsheetId: string,
-  sheetName: string,
-  headers: string[],
-): Promise<void> {
-  try {
-    // Check if the sheet exists by getting headers
-    await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: `${sheetName}!A1:A`,
-    });
-  } catch (error: any) {
-    // If error status is 400 or range is invalid, we assume sheet does not exist
-    if (error?.status === 400 || error?.message?.includes("unable to parse") || String(error).includes("unable to parse")) {
-      try {
-        // Create the sheet
-        await sheets.spreadsheets.batchUpdate({
-          spreadsheetId,
-          requestBody: {
-            requests: [
-              {
-                addSheet: {
-                  properties: {
-                    title: sheetName,
-                  },
-                },
-              },
-            ],
-          },
-        });
-
-        // Set the headers in row 1
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${sheetName}!A1`,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [headers],
-          },
-        });
-      } catch (err) {
-        console.error(`[ensureSheetExists] Failed to create sheet "${sheetName}":`, err);
-      }
-    } else {
-      console.error(`[ensureSheetExists] Unexpected error checking sheet "${sheetName}":`, error);
+function assertEnvVars() {
+  for (const key of REQUIRED_ENV_VARS) {
+    if (!process.env[key]) {
+      throw new Error(`Missing required env var: ${key}`);
     }
   }
+}
+
+function normalizePrivateKey(raw: string | undefined) {
+  if (!raw) {
+    throw new Error("Missing GOOGLE_PRIVATE_KEY");
+  }
+
+  let key = raw.trim();
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1);
+  }
+
+  return key.replace(/\\n/g, "\n");
 }
 
 function getSheetsClient(): sheets_v4.Sheets {
-  if (!isGoogleSheetsConfigured()) {
-    throw new Error("Google Sheets is not configured on this server.");
-  }
+  assertEnvVars();
 
   const auth = new google.auth.JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    key: normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY),
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
 
   return google.sheets({ version: "v4", auth });
 }
 
-export async function getPlayers(): Promise<Player[]> {
-  const db = await readLocalDb();
-  return db.players;
+function getSpreadsheetId() {
+  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+  if (!spreadsheetId) {
+    throw new Error("Missing GOOGLE_SPREADSHEET_ID");
+  }
+  return spreadsheetId;
 }
 
-export async function addPlayer(name: string, spreadsheetId?: string): Promise<Player> {
+function cleanCell(value = "") {
+  return value.replace(/\r/g, "").trim();
+}
+
+function toPlayerRow(row: string[]): Player {
+  const [playerId = "", name = "", dateAdded = "", gender = ""] = row.map(cleanCell);
+  const normalizedGender: PlayerGender = gender === "female" ? "female" : "male";
+  return { playerId, name, dateAdded, gender: normalizedGender };
+}
+
+function toGameRow(row: string[]): Game {
+  const [gameId = "", date = "", opponent = "", location = ""] = row.map(cleanCell);
+  return { gameId, date, opponent, location };
+}
+
+function toStatRow(row: string[]): StatEntry {
+  const [statId = "", gameId = "", playerName = "", statType = "", timestamp = ""] =
+    row.map(cleanCell);
+
+  if (!STAT_TYPES.includes(statType as StatType)) {
+    throw new Error(`Invalid stat type in sheet row: "${statType}"`);
+  }
+
+  return {
+    statId,
+    gameId,
+    playerName,
+    statType: statType as StatType,
+    timestamp,
+  };
+}
+
+export async function getPlayers(): Promise<Player[]> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SHEET_NAMES.players}!A2:D`,
+  });
+
+  const rows = (response.data.values ?? []) as string[][];
+  return rows.filter((row) => row[0] && row[1]).map(toPlayerRow);
+}
+
+export async function addPlayer(name: string, gender: PlayerGender = "male"): Promise<Player> {
   const normalizedName = name.trim();
   if (!normalizedName) {
     throw new Error("Player name is required.");
   }
 
-  const db = await readLocalDb();
-
-  // Check if player name already exists (case-insensitive)
-  const existingPlayer = db.players.find(
-    (p) => p.name.toLowerCase() === normalizedName.toLowerCase(),
-  );
-  if (existingPlayer) {
-    return existingPlayer;
-  }
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
 
   const player: Player = {
     playerId: randomUUID(),
     name: normalizedName,
     dateAdded: new Date().toISOString(),
+    gender,
   };
 
-  db.players.push(player);
-  await writeLocalDb(db);
-
-  // Sync to Google Spreadsheet if ID is specified and configured
-  if (spreadsheetId && isGoogleSheetsConfigured()) {
-    try {
-      const sheets = getSheetsClient();
-      await ensureSheetExists(sheets, spreadsheetId, SHEET_NAMES.players, [
-        "playerId",
-        "name",
-        "dateAdded",
-      ]);
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: `${SHEET_NAMES.players}!A:C`,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [[player.playerId, player.name, player.dateAdded]],
-        },
-      });
-    } catch (error) {
-      console.error("Failed to sync player to Google Sheet:", error);
-    }
-  }
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.players}!A:D`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [[player.playerId, player.name, player.dateAdded, player.gender]],
+    },
+  });
 
   return player;
 }
 
-export async function createGame(
-  input: {
-    date: string;
-    opponent: string;
-    location?: string;
-  },
-  spreadsheetId?: string,
-): Promise<Game> {
+export async function ensurePlayerRoster(name: string, gender: PlayerGender = "male"): Promise<Player> {
+  const normalizedName = name.trim();
+  if (!normalizedName) {
+    throw new Error("Player name is required.");
+  }
+
+  const players = await getPlayers();
+  const normalizedTarget = normalizedName.toLowerCase();
+  const existing = players.find(
+    (player) => player.name.trim().toLowerCase() === normalizedTarget,
+  );
+
+  if (existing) {
+    return existing;
+  }
+
+  return addPlayer(normalizedName, gender);
+}
+
+export async function createGame(input: {
+  date: string;
+  opponent: string;
+  location?: string;
+}): Promise<Game> {
   const date = input.date.trim();
   const opponent = input.opponent.trim();
   const location = input.location?.trim() ?? "";
@@ -222,7 +170,8 @@ export async function createGame(
     throw new Error("Game date and opponent are required.");
   }
 
-  const db = await readLocalDb();
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
 
   const game: Game = {
     gameId: randomUUID(),
@@ -231,44 +180,24 @@ export async function createGame(
     location,
   };
 
-  db.games.push(game);
-  await writeLocalDb(db);
-
-  // Sync to Google Spreadsheet if ID is specified and configured
-  if (spreadsheetId && isGoogleSheetsConfigured()) {
-    try {
-      const sheets = getSheetsClient();
-      await ensureSheetExists(sheets, spreadsheetId, SHEET_NAMES.games, [
-        "gameId",
-        "date",
-        "opponent",
-        "location",
-      ]);
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: `${SHEET_NAMES.games}!A:D`,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [[game.gameId, game.date, game.opponent, game.location]],
-        },
-      });
-    } catch (error) {
-      console.error("Failed to sync game to Google Sheet:", error);
-    }
-  }
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.games}!A:D`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [[game.gameId, game.date, game.opponent, game.location]],
+    },
+  });
 
   return game;
 }
 
-export async function appendStat(
-  input: {
-    gameId: string;
-    playerName: string;
-    statType: StatType;
-    timestamp?: string;
-  },
-  spreadsheetId?: string,
-): Promise<StatEntry> {
+export async function appendStat(input: {
+  gameId: string;
+  playerName: string;
+  statType: StatType;
+  timestamp?: string;
+}): Promise<StatEntry> {
   const gameId = input.gameId.trim();
   const playerName = input.playerName.trim();
 
@@ -280,7 +209,8 @@ export async function appendStat(
     throw new Error(`Unsupported stat type "${input.statType}".`);
   }
 
-  const db = await readLocalDb();
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
 
   const entry: StatEntry = {
     statId: randomUUID(),
@@ -290,345 +220,244 @@ export async function appendStat(
     timestamp: input.timestamp ?? new Date().toISOString(),
   };
 
-  db.stats.push(entry);
-  await writeLocalDb(db);
-
-  // Sync to Google Spreadsheet if ID is specified and configured
-  if (spreadsheetId && isGoogleSheetsConfigured()) {
-    try {
-      const sheets = getSheetsClient();
-      await ensureSheetExists(sheets, spreadsheetId, SHEET_NAMES.stats, [
-        "statId",
-        "gameId",
-        "playerName",
-        "statType",
-        "timestamp",
-      ]);
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: `${SHEET_NAMES.stats}!A:E`,
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [
-            [
-              entry.statId,
-              entry.gameId,
-              entry.playerName,
-              entry.statType,
-              entry.timestamp,
-            ],
-          ],
-        },
-      });
-    } catch (error) {
-      console.error("Failed to sync stat to Google Sheet:", error);
-    }
-  }
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.stats}!A:E`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [
+        [
+          entry.statId,
+          entry.gameId,
+          entry.playerName,
+          entry.statType,
+          entry.timestamp,
+        ],
+      ],
+    },
+  });
 
   return entry;
 }
 
 export async function appendStatsBatch(
-  statsInput: Array<{
+  entries: Array<{
     gameId: string;
     playerName: string;
     statType: StatType;
     timestamp?: string;
   }>,
-  spreadsheetId?: string,
-): Promise<StatEntry[]> {
-  const db = await readLocalDb();
-  const entries: StatEntry[] = [];
-
-  for (const input of statsInput) {
-    const gameId = input.gameId.trim();
-    const playerName = input.playerName.trim();
-
-    if (!gameId || !playerName || !STAT_TYPES.includes(input.statType)) {
-      continue;
-    }
-
-    const entry: StatEntry = {
-      statId: randomUUID(),
-      gameId,
-      playerName,
-      statType: input.statType,
-      timestamp: input.timestamp ?? new Date().toISOString(),
-    };
-
-    entries.push(entry);
-    db.stats.push(entry);
-  }
-
-  await writeLocalDb(db);
-
-  // Sync to Google Spreadsheet if ID is specified and configured
-  if (spreadsheetId && isGoogleSheetsConfigured() && entries.length > 0) {
-    try {
-      const sheets = getSheetsClient();
-      await ensureSheetExists(sheets, spreadsheetId, SHEET_NAMES.stats, [
-        "statId",
-        "gameId",
-        "playerName",
-        "statType",
-        "timestamp",
-      ]);
-
-      const values = entries.map((entry) => [
-        entry.statId,
-        entry.gameId,
-        entry.playerName,
-        entry.statType,
-        entry.timestamp,
-      ]);
-
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: `${SHEET_NAMES.stats}!A:E`,
-        valueInputOption: "RAW",
-        requestBody: {
-          values,
-        },
-      });
-    } catch (error) {
-      console.error("Failed to sync stats batch to Google Sheet:", error);
-    }
-  }
-
-  return entries;
-}
-
-export async function getAllStats(): Promise<StatEntry[]> {
-  const db = await readLocalDb();
-  return db.stats;
-}
-
-export async function getGameStats(gameId: string): Promise<StatEntry[]> {
-  const allStats = await getAllStats();
-  return allStats.filter((entry) => entry.gameId === gameId);
-}
-
-export async function getGames(): Promise<Game[]> {
-  const db = await readLocalDb();
-  return db.games;
-}
-
-export async function importSpreadsheetData(
-  spreadsheetId: string,
-): Promise<{ success: boolean; message: string }> {
-  if (!isGoogleSheetsConfigured()) {
-    throw new Error("Google Sheets is not configured on this server.");
+): Promise<void> {
+  if (entries.length === 0) {
+    return;
   }
 
   const sheets = getSheetsClient();
-  const db = await readLocalDb();
+  const spreadsheetId = getSpreadsheetId();
+  const timestamp = new Date().toISOString();
 
-  const getRows = async (sheetName: string, range: string): Promise<string[][]> => {
-    try {
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `${sheetName}!${range}`,
-      });
-      return response.data.values ?? [];
-    } catch (error) {
-      console.warn(`Failed to fetch sheet "${sheetName}":`, error);
-      return [];
-    }
-  };
+  const values = entries.map((entry) => [
+    randomUUID(),
+    entry.gameId.trim(),
+    entry.playerName.trim(),
+    entry.statType,
+    entry.timestamp ?? timestamp,
+  ]);
 
-  // Fetch from Google Sheet
-  const playerRows = await getRows(SHEET_NAMES.players, "A2:C");
-  const importedPlayers = playerRows
-    .filter((row) => row[0] && row[1])
-    .map(([playerId = "", name = "", dateAdded = ""]) => ({ playerId, name, dateAdded }));
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.stats}!A:E`,
+    valueInputOption: "RAW",
+    requestBody: { values },
+  });
+}
 
-  const gameRows = await getRows(SHEET_NAMES.games, "A2:D");
-  const importedGames = gameRows
-    .filter((row) => row[0] && row[1] && row[2])
-    .map(([gameId = "", date = "", opponent = "", location = ""]) => ({
-      gameId,
-      date,
-      opponent,
-      location,
-    }));
+export async function getAllStats(): Promise<StatEntry[]> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
 
-  const statRows = await getRows(SHEET_NAMES.stats, "A2:E");
-  const importedStats = statRows
-    .filter((row) => row[0] && row[1] && row[2] && row[3])
-    .map(([statId = "", gameId = "", playerName = "", statType = "", timestamp = ""]) => {
-      const normalizedStat = STAT_TYPES.includes(statType as StatType)
-        ? (statType as StatType)
-        : ("Score" as StatType);
-      return { statId, gameId, playerName, statType: normalizedStat, timestamp };
-    });
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SHEET_NAMES.stats}!A2:E`,
+  });
 
-  let updatedCount = 0;
+  const rows = (response.data.values ?? []) as string[][];
+  return rows
+    .filter((row) => row[0] && row[1] && row[2] && row[3] && row[4])
+    .map(toStatRow);
+}
 
-  // Merge Players
-  for (const ip of importedPlayers) {
-    if (
-      !db.players.some(
-        (p) => p.playerId === ip.playerId || p.name.toLowerCase() === ip.name.toLowerCase(),
-      )
-    ) {
-      db.players.push(ip);
-      updatedCount++;
-    }
+export async function getGameStats(gameId: string): Promise<StatEntry[]> {
+  const trimmedGameId = gameId.trim();
+  if (!trimmedGameId) {
+    throw new Error("Game ID is required.");
   }
 
-  // Merge Games
-  for (const ig of importedGames) {
-    if (!db.games.some((g) => g.gameId === ig.gameId)) {
-      db.games.push(ig);
-      updatedCount++;
-    }
+  const allStats = await getAllStats();
+  return allStats.filter((entry) => entry.gameId === trimmedGameId);
+}
+
+export async function getGames(): Promise<Game[]> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SHEET_NAMES.games}!A2:D`,
+  });
+
+  const rows = (response.data.values ?? []) as string[][];
+  return rows.filter((row) => row[0] && row[1] && row[2]).map(toGameRow);
+}
+
+function toUserRow(row: string[]): RegisteredUser {
+  const [
+    userId = "",
+    username = "",
+    password = "",
+    playerName = "",
+    gender = "",
+    role = "",
+    dateAdded = "",
+  ] = row.map(cleanCell);
+  if (!USER_ROLES.includes(role as UserRole)) {
+    throw new Error(`Invalid role in sheet row: "${role}"`);
   }
 
-  // Merge Stats
-  for (const is of importedStats) {
-    if (!db.stats.some((s) => s.statId === is.statId)) {
-      db.stats.push(is);
-      updatedCount++;
-    }
-  }
-
-  if (updatedCount > 0) {
-    await writeLocalDb(db);
+  if (!PLAYER_GENDERS.includes(gender as PlayerGender)) {
+    throw new Error(`Invalid gender in sheet row: "${gender}"`);
   }
 
   return {
-    success: true,
-    message: `Successfully synchronized ${updatedCount} new records from Google Sheets.`,
+    userId,
+    username,
+    password,
+    playerName,
+    gender: gender as PlayerGender,
+    role: role as UserRole,
+    dateAdded,
   };
 }
 
-export async function getActiveGame(): Promise<any | null> {
-  const db = await readLocalDb();
-  return db.activeGame ?? null;
-}
+async function getSheetId(sheetName: string): Promise<number> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
 
-export async function updateActiveGame(data: any): Promise<void> {
-  const db = await readLocalDb();
-  db.activeGame = data;
-  await writeLocalDb(db);
-}
+  const response = await sheets.spreadsheets.get({ spreadsheetId });
+  const sheet = response.data.sheets?.find((entry) => entry.properties?.title === sheetName);
 
-export async function clearActiveGame(): Promise<void> {
-  const db = await readLocalDb();
-  db.activeGame = null;
-  await writeLocalDb(db);
-}
-
-export async function getTeams(): Promise<Team[]> {
-  const db = await readLocalDb();
-  return db.teams || [];
-}
-
-export async function addOrUpdateTeam(
-  name: string,
-  teamId?: string,
-  spreadsheetId?: string,
-): Promise<Team> {
-  const normalized = name.trim();
-  if (!normalized) {
-    throw new Error("Team name is required.");
+  if (sheet?.properties?.sheetId === undefined || sheet.properties.sheetId === null) {
+    throw new Error(
+      `Sheet tab "${sheetName}" not found. Add a "${sheetName}" tab with the correct headers.`,
+    );
   }
 
-  const db = await readLocalDb();
-  let team: Team;
+  return sheet.properties.sheetId;
+}
 
-  if (teamId) {
-    const index = db.teams.findIndex((t) => t.teamId === teamId);
-    if (index === -1) {
-      throw new Error("Team not found.");
-    }
-    db.teams[index].name = normalized;
-    team = db.teams[index];
-  } else {
-    const exists = db.teams.some((t) => t.name.toLowerCase() === normalized.toLowerCase());
-    if (exists) {
-      throw new Error("A team with this name already exists.");
-    }
-    team = {
-      teamId: randomUUID(),
-      name: normalized,
-      dateCreated: new Date().toISOString(),
-    };
-    db.teams.push(team);
+export async function getUsers(): Promise<RegisteredUser[]> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SHEET_NAMES.users}!A2:G`,
+  });
+
+  const rows = (response.data.values ?? []) as string[][];
+  return rows.filter((row) => row[0] && row[1] && row[2]).map(toUserRow);
+}
+
+export async function addUser(input: {
+  username: string;
+  password: string;
+  playerName: string;
+  gender: PlayerGender;
+  role: UserRole;
+}): Promise<RegisteredUser> {
+  const username = input.username.trim();
+  const password = input.password.trim();
+  const playerName = input.playerName.trim();
+
+  if (!username || !password || !playerName) {
+    throw new Error("Username, password, and player name are required.");
   }
 
-  await writeLocalDb(db);
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+  const existingUsers = await getUsers();
+  const normalizedUsername = username.toLowerCase();
 
-  if (spreadsheetId && isGoogleSheetsConfigured()) {
-    try {
-      const sheets = getSheetsClient();
-      await ensureSheetExists(sheets, spreadsheetId, SHEET_NAMES.teams, [
-        "teamId",
-        "name",
-        "dateCreated",
-      ]);
+  if (existingUsers.some((user) => user.username.trim().toLowerCase() === normalizedUsername)) {
+    throw new Error("That username is already taken.");
+  }
 
-      if (teamId) {
-        const values = db.teams.map((t) => [t.teamId, t.name, t.dateCreated]);
-        await sheets.spreadsheets.values.clear({
-          spreadsheetId,
-          range: `${SHEET_NAMES.teams}!A2:C`,
-        });
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${SHEET_NAMES.teams}!A2`,
-          valueInputOption: "RAW",
-          requestBody: { values },
-        });
-      } else {
-        await sheets.spreadsheets.values.append({
-          spreadsheetId,
-          range: `${SHEET_NAMES.teams}!A:C`,
-          valueInputOption: "RAW",
-          requestBody: {
-            values: [[team.teamId, team.name, team.dateCreated]],
+  const user: RegisteredUser = {
+    userId: randomUUID(),
+    username,
+    password,
+    playerName,
+    gender: input.gender,
+    role: input.role,
+    dateAdded: new Date().toISOString(),
+  };
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.users}!A:G`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [
+        [
+          user.userId,
+          user.username,
+          user.password,
+          user.playerName,
+          user.gender,
+          user.role,
+          user.dateAdded,
+        ],
+      ],
+    },
+  });
+
+  return user;
+}
+
+export async function removeUserByUsername(username: string): Promise<void> {
+  const targetUsername = username.trim().toLowerCase();
+  if (!targetUsername) {
+    throw new Error("Username is required.");
+  }
+
+  const users = await getUsers();
+  const rowIndex = users.findIndex(
+    (user) => user.username.trim().toLowerCase() === targetUsername,
+  );
+
+  if (rowIndex === -1) {
+    throw new Error("Account not found.");
+  }
+
+  const sheetId = await getSheetId(SHEET_NAMES.users);
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId,
+              dimension: "ROWS",
+              startIndex: rowIndex + 1,
+              endIndex: rowIndex + 2,
+            },
           },
-        });
-      }
-    } catch (error) {
-      console.error("Failed to sync team to Google Sheet:", error);
-    }
-  }
-
-  return team;
+        },
+      ],
+    },
+  });
 }
-
-export async function deleteTeam(teamId: string, spreadsheetId?: string): Promise<void> {
-  const db = await readLocalDb();
-  db.teams = db.teams.filter((t) => t.teamId !== teamId);
-  await writeLocalDb(db);
-
-  if (spreadsheetId && isGoogleSheetsConfigured()) {
-    try {
-      const sheets = getSheetsClient();
-      await ensureSheetExists(sheets, spreadsheetId, SHEET_NAMES.teams, [
-        "teamId",
-        "name",
-        "dateCreated",
-      ]);
-
-      const values = db.teams.map((t) => [t.teamId, t.name, t.dateCreated]);
-      await sheets.spreadsheets.values.clear({
-        spreadsheetId,
-        range: `${SHEET_NAMES.teams}!A2:C`,
-      });
-      if (values.length > 0) {
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: `${SHEET_NAMES.teams}!A2`,
-          valueInputOption: "RAW",
-          requestBody: { values },
-        });
-      }
-    } catch (error) {
-      console.error("Failed to delete team from Google Sheet:", error);
-    }
-  }
-}
-
-

@@ -6,18 +6,19 @@ import { useRouter } from "next/navigation";
 import {
   AuthUser,
   clearAuthUser,
-  getAllRegisteredUsers,
   getAuthUser,
   isAdmin,
-  removeRegisteredUser,
 } from "@/lib/auth";
+import { fetchRegisteredUsers, removeAccount } from "@/lib/client-api";
+import type { PublicUser } from "@/types/auth";
 
 export default function AdminPage() {
   const router = useRouter();
   const [authUser, setAuthUserState] = useState<AuthUser | null>(null);
   const [isCheckingAccess, setIsCheckingAccess] = useState(true);
-  const [registeredUsers, setRegisteredUsers] = useState(getAllRegisteredUsers());
+  const [registeredUsers, setRegisteredUsers] = useState<PublicUser[]>([]);
   const [actionError, setActionError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [removingUsername, setRemovingUsername] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,8 +34,21 @@ export default function AdminPage() {
     }
 
     setAuthUserState(user);
-    setRegisteredUsers(getAllRegisteredUsers());
-    setIsCheckingAccess(false);
+
+    async function loadUsers() {
+      try {
+        const users = await fetchRegisteredUsers();
+        setRegisteredUsers(users);
+      } catch (error) {
+        setLoadError(
+          error instanceof Error ? error.message : "Failed to load users from Google Sheets.",
+        );
+      } finally {
+        setIsCheckingAccess(false);
+      }
+    }
+
+    void loadUsers();
   }, [router]);
 
   function handleLogout() {
@@ -42,13 +56,13 @@ export default function AdminPage() {
     router.replace("/login");
   }
 
-  function handleRemoveAccount(targetUsername: string) {
+  async function handleRemoveAccount(targetUsername: string) {
     if (!authUser) {
       return;
     }
 
     const confirmed = window.confirm(
-      `Remove account "${targetUsername}"? This cannot be undone.`,
+      `Remove login for "${targetUsername}"? Their player profile will stay in the roster for game setup.`,
     );
     if (!confirmed) {
       return;
@@ -57,15 +71,17 @@ export default function AdminPage() {
     setActionError("");
     setRemovingUsername(targetUsername);
 
-    const result = removeRegisteredUser(targetUsername, authUser);
-    if (!result.ok) {
-      setActionError(result.error);
+    try {
+      await removeAccount({
+        targetUsername,
+        actingUsername: authUser.username,
+      });
+      setRegisteredUsers(await fetchRegisteredUsers());
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Failed to remove account.");
+    } finally {
       setRemovingUsername(null);
-      return;
     }
-
-    setRegisteredUsers(getAllRegisteredUsers());
-    setRemovingUsername(null);
   }
 
   if (isCheckingAccess) {
@@ -114,6 +130,12 @@ export default function AdminPage() {
           <p className="mt-1 text-sm text-slate-500">
             View all accounts and remove users when needed.
           </p>
+
+          {loadError && (
+            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {loadError}
+            </div>
+          )}
 
           {actionError && (
             <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
