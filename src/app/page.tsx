@@ -218,7 +218,8 @@ export default function Home() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [screen, setScreen] = useState<Screen>("setup");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [gameDurationMinutes, setGameDurationMinutes] = useState(20);
+  const [gameDurationInput, setGameDurationInput] = useState("");
+  const [liveGameActive, setLiveGameActive] = useState(false);
   const [playerSearch, setPlayerSearch] = useState("");
   const [matchup, setMatchup] = useState<{ home: TeamKey; away: TeamKey }>({
     home: "team1",
@@ -236,10 +237,14 @@ export default function Home() {
   const [isSavingGame, setIsSavingGame] = useState(false);
   const [saveGameError, setSaveGameError] = useState("");
 
-  const configuredDurationSeconds = useMemo(
-    () => Math.max(gameDurationMinutes, 1) * 60,
-    [gameDurationMinutes],
-  );
+  const configuredDurationSeconds = useMemo(() => {
+    const minutes = Number(gameDurationInput);
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      return 0;
+    }
+
+    return minutes * 60;
+  }, [gameDurationInput]);
 
   useEffect(() => {
     const user = getAuthUser();
@@ -432,6 +437,26 @@ export default function Home() {
     [matchup],
   );
 
+  useEffect(() => {
+    if (!liveGameActive) {
+      return;
+    }
+
+    setTeamPlayers((current) => {
+      const next = { ...current };
+
+      for (const key of matchupTeams) {
+        const assignedNames = teamSelections[key];
+        const existingByName = new Map(current[key].map((player) => [player.name, player]));
+        next[key] = assignedNames.map(
+          (name) => existingByName.get(name) ?? createPlayer(name, key),
+        );
+      }
+
+      return next;
+    });
+  }, [liveGameActive, matchupTeams, teamSelections]);
+
   const matchupPlayers = useMemo(
     () => ({
       home: teamPlayers[matchup.home],
@@ -597,6 +622,10 @@ export default function Home() {
   }
 
   function startLiveGame() {
+    if (configuredDurationSeconds <= 0) {
+      return;
+    }
+
     const nextTeamPlayers = createEmptyTeamPlayers();
     for (const key of matchupTeams) {
       nextTeamPlayers[key] = teamSelections[key].map((name) => createPlayer(name, key));
@@ -605,6 +634,7 @@ export default function Home() {
     setLogEntries([]);
     setTimerSeconds(configuredDurationSeconds);
     setTimerRunning(true);
+    setLiveGameActive(true);
     setScreen("live");
   }
 
@@ -709,6 +739,7 @@ export default function Home() {
       });
 
       setCompletedGames((current) => [toCompletedGame(savedGame), ...current]);
+      setLiveGameActive(false);
       setScreen("summary");
     } catch (error) {
       setSaveGameError(
@@ -993,15 +1024,10 @@ export default function Home() {
                     <input
                       type="number"
                       min={1}
-                      max={180}
-                      value={gameDurationMinutes}
-                      onChange={(event) => {
-                        const value = Number(event.target.value);
-                        if (Number.isNaN(value)) {
-                          return;
-                        }
-                        setGameDurationMinutes(Math.min(180, Math.max(1, value)));
-                      }}
+                      step={1}
+                      value={gameDurationInput}
+                      onChange={(event) => setGameDurationInput(event.target.value)}
+                      placeholder="Enter minutes"
                       className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     />
                   </label>
@@ -1088,7 +1114,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={startLiveGame}
-                disabled={matchup.home === matchup.away}
+                disabled={matchup.home === matchup.away || configuredDurationSeconds <= 0}
                 className="w-full rounded-3xl bg-blue-600 px-5 py-4 text-lg font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 Start live scoring
