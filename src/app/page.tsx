@@ -3,14 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PlayerProgressChart } from "@/components/PlayerProgressChart";
-import {
-  DashboardPanelArt,
-  HubPanelCard,
-  LivePanelArt,
-  ProfilePanelArt,
-  SetupPanelArt,
-  SummaryPanelArt,
-} from "@/components/HubPanelCard";
+import { HubPanelCard, PANEL_IMAGE_PATHS } from "@/components/HubPanelCard";
 import { ProfilePhotoAvatar, ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { fetchCompletedGames, fetchRegisteredUsers, fetchSheetPlayers, saveCompletedGame } from "@/lib/client-api";
 import { STAT_TYPES, StatType } from "@/types/stats";
@@ -27,22 +20,6 @@ const SCREEN_TITLES: Record<Screen, string> = {
   dashboard: "Dashboard",
   profile: "Profile",
 };
-
-const ADMIN_NAV_ITEMS: Array<[Screen, string]> = [
-  ["home", "Home"],
-  ["setup", "Setup"],
-  ["live", "Live Game"],
-  ["summary", "Summary"],
-  ["dashboard", "Dashboard"],
-  ["profile", "Profile"],
-];
-
-const USER_NAV_ITEMS: Array<[Screen, string]> = [
-  ["home", "Home"],
-  ["summary", "Summary"],
-  ["dashboard", "Dashboard"],
-  ["profile", "Profile"],
-];
 
 type PersonalGameRecord = {
   gameId: string;
@@ -468,7 +445,6 @@ export default function Home() {
   ]);
 
   const userIsAdmin = isAdmin(authUser);
-  const navItems = userIsAdmin ? ADMIN_NAV_ITEMS : USER_NAV_ITEMS;
 
   const hubPanels = useMemo(() => {
     const panels = [
@@ -477,7 +453,7 @@ export default function Home() {
         title: "Setup",
         subtitle: "Teams, players & timer",
         colorClass: "bg-blue-600",
-        artwork: <SetupPanelArt />,
+        imageSrc: PANEL_IMAGE_PATHS.setup,
         adminOnly: true,
         badge: undefined as string | undefined,
       },
@@ -486,7 +462,7 @@ export default function Home() {
         title: "Live Game",
         subtitle: "Track stats in real time",
         colorClass: "bg-rose-500",
-        artwork: <LivePanelArt />,
+        imageSrc: PANEL_IMAGE_PATHS.live,
         adminOnly: true,
         badge: canResumeLiveGame ? "In progress" : undefined,
       },
@@ -495,7 +471,7 @@ export default function Home() {
         title: "Summary",
         subtitle: "Review & save game results",
         colorClass: "bg-violet-600",
-        artwork: <SummaryPanelArt />,
+        imageSrc: PANEL_IMAGE_PATHS.summary,
         adminOnly: false,
         badge: undefined,
       },
@@ -504,7 +480,7 @@ export default function Home() {
         title: "Dashboard",
         subtitle: "Rankings & game history",
         colorClass: "bg-amber-500",
-        artwork: <DashboardPanelArt />,
+        imageSrc: PANEL_IMAGE_PATHS.dashboard,
         adminOnly: false,
         badge: undefined,
       },
@@ -513,7 +489,7 @@ export default function Home() {
         title: "Profile",
         subtitle: "Your stats & photo",
         colorClass: "bg-slate-900",
-        artwork: <ProfilePanelArt />,
+        imageSrc: PANEL_IMAGE_PATHS.profile,
         adminOnly: false,
         badge: undefined,
       },
@@ -1219,7 +1195,7 @@ export default function Home() {
                 title={panel.title}
                 subtitle={panel.subtitle}
                 colorClass={panel.colorClass}
-                artwork={panel.artwork}
+                imageSrc={panel.imageSrc}
                 badge={panel.badge}
                 onClick={() => setScreen(panel.screen)}
               />
@@ -1870,34 +1846,23 @@ export default function Home() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-lg items-center justify-around px-2 py-2 sm:max-w-xl">
-          {navItems.map(([value, label]) => {
-            const isActive = screen === value || (screen === "home" && value === "home");
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setScreen(value)}
-                className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[11px] font-medium transition ${
-                  isActive ? "text-blue-600" : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                <span
-                  className={`flex h-8 w-8 items-center justify-center rounded-full text-base ${
-                    isActive ? "bg-blue-600 text-white" : "bg-slate-100"
-                  }`}
-                >
-                  {value === "home" && "⌂"}
-                  {value === "setup" && "⚙"}
-                  {value === "live" && "▶"}
-                  {value === "summary" && "☰"}
-                  {value === "dashboard" && "📊"}
-                  {value === "profile" && "👤"}
-                </span>
-                <span className="truncate">{label}</span>
-              </button>
-            );
-          })}
+        <div className="mx-auto flex max-w-lg justify-center px-2 py-3 sm:max-w-xl">
+          <button
+            type="button"
+            onClick={() => setScreen("home")}
+            className={`flex flex-col items-center gap-1 rounded-2xl px-6 py-1 text-xs font-medium transition ${
+              screen === "home" ? "text-blue-600" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <span
+              className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${
+                screen === "home" ? "bg-blue-600 text-white" : "bg-slate-100"
+              }`}
+            >
+              ⌂
+            </span>
+            <span>Home</span>
+          </button>
         </div>
       </nav>
     </main>
