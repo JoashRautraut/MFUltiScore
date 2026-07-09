@@ -218,8 +218,7 @@ export default function Home() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [screen, setScreen] = useState<Screen>("setup");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [gameDurationInput, setGameDurationInput] = useState("");
-  const [liveGameActive, setLiveGameActive] = useState(false);
+  const [gameDurationMinutes, setGameDurationMinutes] = useState("");
   const [playerSearch, setPlayerSearch] = useState("");
   const [matchup, setMatchup] = useState<{ home: TeamKey; away: TeamKey }>({
     home: "team1",
@@ -236,15 +235,20 @@ export default function Home() {
   const [gamesLoadError, setGamesLoadError] = useState("");
   const [isSavingGame, setIsSavingGame] = useState(false);
   const [saveGameError, setSaveGameError] = useState("");
+  const [liveGameActive, setLiveGameActive] = useState(false);
 
-  const configuredDurationSeconds = useMemo(() => {
-    const minutes = Number(gameDurationInput);
-    if (!Number.isFinite(minutes) || minutes <= 0) {
-      return 0;
+  const parsedDurationMinutes = useMemo(() => {
+    const value = Number(gameDurationMinutes);
+    if (!Number.isFinite(value) || value <= 0) {
+      return null;
     }
+    return value;
+  }, [gameDurationMinutes]);
 
-    return minutes * 60;
-  }, [gameDurationInput]);
+  const configuredDurationSeconds = useMemo(
+    () => (parsedDurationMinutes ?? 0) * 60,
+    [parsedDurationMinutes],
+  );
 
   useEffect(() => {
     const user = getAuthUser();
@@ -614,15 +618,43 @@ export default function Home() {
     };
   }, [authUser, completedGames, dashboardPlayers]);
 
+  function syncLiveRoster(name: string, team: TeamKey | null) {
+    setTeamPlayers((current) => {
+      const next = { ...current };
+      let existingPlayer: ActivePlayer | null = null;
+
+      for (const teamKey of matchupTeams) {
+        const found = next[teamKey].find((player) => player.name === name);
+        if (found) {
+          existingPlayer = found;
+        }
+        next[teamKey] = next[teamKey].filter((player) => player.name !== name);
+      }
+
+      if (team && matchupTeams.includes(team)) {
+        next[team] = [
+          ...next[team],
+          existingPlayer ?? createPlayer(name, team),
+        ];
+      }
+
+      return next;
+    });
+  }
+
   function assignPlayer(name: string, team: TeamKey | null) {
     setPlayerAssignments((current) => ({
       ...current,
       [name]: team,
     }));
+
+    if (liveGameActive) {
+      syncLiveRoster(name, team);
+    }
   }
 
   function startLiveGame() {
-    if (configuredDurationSeconds <= 0) {
+    if (!parsedDurationMinutes) {
       return;
     }
 
@@ -1025,12 +1057,19 @@ export default function Home() {
                       type="number"
                       min={1}
                       step={1}
-                      value={gameDurationInput}
-                      onChange={(event) => setGameDurationInput(event.target.value)}
-                      placeholder="Enter minutes"
+                      inputMode="numeric"
+                      placeholder="Enter minutes (e.g. 20)"
+                      value={gameDurationMinutes}
+                      onChange={(event) => setGameDurationMinutes(event.target.value)}
                       className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     />
                   </label>
+                  {!parsedDurationMinutes && gameDurationMinutes.trim() !== "" && (
+                    <p className="mt-2 text-sm text-red-600">Enter a valid number of minutes greater than 0.</p>
+                  )}
+                  {!gameDurationMinutes.trim() && (
+                    <p className="mt-2 text-sm text-slate-500">Set how long the countdown should run before you start.</p>
+                  )}
                 </div>
               </div>
 
@@ -1113,11 +1152,11 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={startLiveGame}
-                disabled={matchup.home === matchup.away || configuredDurationSeconds <= 0}
+                onClick={() => (liveGameActive ? setScreen("live") : startLiveGame())}
+                disabled={!liveGameActive && (matchup.home === matchup.away || !parsedDurationMinutes)}
                 className="w-full rounded-3xl bg-blue-600 px-5 py-4 text-lg font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                Start live scoring
+                {liveGameActive ? "Back to live game" : "Start live scoring"}
               </button>
             </div>
 
@@ -1125,6 +1164,12 @@ export default function Home() {
               <div className="mb-4">
                 <p className="text-sm font-medium text-slate-500">Player assignment</p>
                 <h2 className="mt-1 text-2xl font-semibold text-slate-900">Choose each player&apos;s team</h2>
+                {liveGameActive && (
+                  <p className="mt-2 text-sm text-blue-700">
+                    Game in progress — assign a player to {getTeamLabel(matchup.home)} or{" "}
+                    {getTeamLabel(matchup.away)} here to add them to the live game.
+                  </p>
+                )}
               </div>
 
               <div className="mb-4">
