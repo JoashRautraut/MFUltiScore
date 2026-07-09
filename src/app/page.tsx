@@ -213,6 +213,19 @@ function getBestPlayer(teamPlayers: Record<TeamKey, ActivePlayer[]>) {
   };
 }
 
+function getRankMedal(rank: number) {
+  if (rank === 1) {
+    return { emoji: "🥇", rowClass: "bg-amber-50/80 ring-1 ring-amber-200", badgeClass: "bg-amber-100 text-amber-900" };
+  }
+  if (rank === 2) {
+    return { emoji: "🥈", rowClass: "bg-slate-50 ring-1 ring-slate-200", badgeClass: "bg-slate-200 text-slate-800" };
+  }
+  if (rank === 3) {
+    return { emoji: "🥉", rowClass: "bg-orange-50/80 ring-1 ring-orange-200", badgeClass: "bg-orange-100 text-orange-900" };
+  }
+  return null;
+}
+
 export default function Home() {
   const router = useRouter();
   const [authUser, setAuthUserState] = useState<AuthUser | null>(null);
@@ -1020,18 +1033,31 @@ export default function Home() {
     }
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-2">
         {players.map((player, index) => {
+          const rank = index + 1;
+          const medal = getRankMedal(rank);
           const widthPercent = Math.max(4, Math.round((player.points / maxPoints) * 100));
+
           return (
-            <div key={player.name} className="grid grid-cols-[56px_140px_1fr_auto] items-center gap-3">
-              <div className="rounded-xl bg-slate-100 px-2 py-2 text-center text-sm font-semibold text-slate-700">
-                #{index + 1}
+            <div
+              key={player.name}
+              className={`grid grid-cols-[44px_1fr_auto] items-center gap-3 rounded-2xl px-3 py-2.5 sm:grid-cols-[52px_minmax(0,140px)_1fr_auto] ${
+                medal?.rowClass ?? ""
+              }`}
+            >
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${
+                  medal ? medal.badgeClass : "bg-slate-100 text-sm font-semibold text-slate-600"
+                }`}
+              >
+                {medal ? medal.emoji : rank}
               </div>
               <div className="min-w-0">
-                <p className="font-medium text-slate-900">{player.name}</p>
+                <p className="truncate font-medium text-slate-900">{player.name}</p>
+                <p className="text-xs text-slate-500">{player.games} games · {player.bestPlayerWins} MPV</p>
               </div>
-              <div className="h-6 rounded-full bg-slate-100 p-1">
+              <div className="hidden h-2 rounded-full bg-slate-100 p-0.5 sm:block">
                 <div
                   className={`h-full rounded-full ${barColorClass}`}
                   style={{ width: `${widthPercent}%` }}
@@ -1452,33 +1478,33 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-600">
-                      <tr>
-                        <th className="px-4 py-3">Player</th>
-                        <th className="px-4 py-3">Team</th>
-                        <th className="px-4 py-3">Block</th>
-                        <th className="px-4 py-3">Assist</th>
-                        <th className="px-4 py-3">Score</th>
-                        <th className="px-4 py-3">Callahan</th>
-                        <th className="px-4 py-3">Points</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {allActivePlayers.map((player) => (
-                        <tr key={`${player.team}-${player.name}`} className="border-t border-slate-200">
-                          <td className="px-4 py-3 font-medium text-slate-900">{player.name}</td>
-                          <td className="px-4 py-3 text-slate-600">{getTeamLabel(player.team)}</td>
-                          <td className="px-4 py-3">{player.counts.Block}</td>
-                          <td className="px-4 py-3">{player.counts.Assist}</td>
-                          <td className="px-4 py-3">{player.counts.Score}</td>
-                          <td className="px-4 py-3">{player.counts.Callahan}</td>
-                          <td className="px-4 py-3">{playerPoints(player.counts)}</td>
-                        </tr>
+                <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-slate-600">Players</p>
+                    <p className="text-xs text-slate-500">{allActivePlayers.length} total</p>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {[...allActivePlayers]
+                      .sort((a, b) => playerPoints(b.counts) - playerPoints(a.counts))
+                      .map((player) => (
+                        <div
+                          key={`${player.team}-${player.name}`}
+                          className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-slate-900">{player.name}</p>
+                            <p className="text-xs text-slate-500">{getTeamLabel(player.team)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold text-slate-900">{playerPoints(player.counts)} pts</p>
+                            <p className="text-xs text-slate-500">
+                              {player.counts.Score}G · {player.counts.Assist}A · {player.counts.Block}B
+                              {player.counts.Callahan > 0 ? ` · ${player.counts.Callahan}C` : ""}
+                            </p>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -1519,12 +1545,10 @@ export default function Home() {
               <div className="border-b border-slate-200 px-5 py-4">
                 <h3 className="text-lg font-semibold text-slate-900">Summary records</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  {userIsAdmin
-                    ? "Saved game summaries stay visible here and new games are added to this list."
-                    : "Browse saved game summaries in read-only mode."}
+                  Tap a game to see player points. Full stat breakdown is hidden by default.
                 </p>
               </div>
-              <div className="divide-y divide-slate-200">
+              <div className="divide-y divide-slate-100">
                 {isLoadingGames && (
                   <div className="px-5 py-8 text-sm text-slate-500">Loading saved games from Google Sheets...</div>
                 )}
@@ -1536,113 +1560,47 @@ export default function Home() {
                     No saved games yet. Play a game and save it to store data in Google Sheets.
                   </div>
                 )}
-                {completedGames.map((game) => (
-                  <details key={game.id} className="group px-5 py-4" open>
-                    <summary className="grid cursor-pointer list-none gap-4 md:grid-cols-4">
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Date</p>
-                        <p className="mt-1 font-medium text-slate-900">{game.date}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Ended</p>
-                        <p className="mt-1 font-medium text-slate-900">{game.endedAt}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Length</p>
-                        <p className="mt-1 font-medium text-slate-900">{formatTime(game.timerSeconds)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">MPV</p>
-                        <p className="mt-1 font-medium text-slate-900">
-                          {game.bestPlayer.name} ({game.bestPlayer.percentage}%) ·{" "}
-                          {getTeamLabel(game.bestPlayer.team)}
-                        </p>
-                      </div>
-                    </summary>
+                {completedGames.map((game) => {
+                  const gamePlayers = [...flattenPlayers(game.teamPlayers)].sort(
+                    (a, b) => playerPoints(b.counts) - playerPoints(a.counts),
+                  );
 
-                    <div className="mt-3 rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900">
-                      {getTeamLabel(game.matchup.home)} VS {getTeamLabel(game.matchup.away)}
-                    </div>
-
-                    <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                      {[game.matchup.home, game.matchup.away].map((teamKey) => (
-                        <div
-                          key={`${game.id}-${teamKey}`}
-                          className="rounded-2xl border border-slate-200 bg-white p-4"
-                        >
-                          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-                            {getTeamLabel(teamKey)}
-                          </h4>
-                          <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                            <table className="min-w-full text-left text-sm">
-                              <thead className="bg-slate-100 text-slate-600">
-                                <tr>
-                                  <th className="px-3 py-2">Player</th>
-                                  <th className="px-3 py-2">B</th>
-                                  <th className="px-3 py-2">A</th>
-                                  <th className="px-3 py-2">S</th>
-                                  <th className="px-3 py-2">C</th>
-                                  <th className="px-3 py-2">Pts</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {game.teamPlayers[teamKey].map((player) => (
-                                  <tr key={`${game.id}-${teamKey}-${player.name}`} className="border-t border-slate-200 bg-white">
-                                    <td className="px-3 py-2 font-medium text-slate-900">{player.name}</td>
-                                    <td className="px-3 py-2">{player.counts.Block}</td>
-                                    <td className="px-3 py-2">{player.counts.Assist}</td>
-                                    <td className="px-3 py-2">{player.counts.Score}</td>
-                                    <td className="px-3 py-2">{player.counts.Callahan}</td>
-                                    <td className="px-3 py-2">{playerPoints(player.counts)}</td>
-                                  </tr>
-                                ))}
-                                {game.teamPlayers[teamKey].length === 0 && (
-                                  <tr>
-                                    <td colSpan={6} className="px-3 py-3 text-center text-slate-500">
-                                      No players in this team.
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
+                  return (
+                    <details key={game.id} className="group px-5 py-3">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-1">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-slate-900">
+                            {getTeamLabel(game.matchup.home)} vs {getTeamLabel(game.matchup.away)}
+                          </p>
+                          <p className="mt-0.5 text-sm text-slate-500">
+                            {game.date} · {formatTime(game.timerSeconds)} · MPV {game.bestPlayer.name}
+                          </p>
                         </div>
-                      ))}
-                    </div>
+                        <span className="shrink-0 text-xs font-medium text-slate-400 group-open:hidden">
+                          Show
+                        </span>
+                        <span className="hidden shrink-0 text-xs font-medium text-slate-400 group-open:inline">
+                          Hide
+                        </span>
+                      </summary>
 
-                    <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                      <table className="min-w-full text-left text-sm">
-                        <thead className="bg-slate-100 text-slate-600">
-                          <tr>
-                            <th className="px-4 py-3">Player</th>
-                            <th className="px-4 py-3">Team</th>
-                            <th className="px-4 py-3">Block</th>
-                            <th className="px-4 py-3">Assist</th>
-                            <th className="px-4 py-3">Score</th>
-                            <th className="px-4 py-3">Callahan</th>
-                            <th className="px-4 py-3">Points</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {flattenPlayers(game.teamPlayers).map((player) => (
-                            <tr
-                              key={`${game.id}-${player.team}-${player.name}`}
-                              className="border-t border-slate-200 bg-white"
-                            >
-                              <td className="px-4 py-3 font-medium text-slate-900">{player.name}</td>
-                              <td className="px-4 py-3 text-slate-600">{getTeamLabel(player.team)}</td>
-                              <td className="px-4 py-3">{player.counts.Block}</td>
-                              <td className="px-4 py-3">{player.counts.Assist}</td>
-                              <td className="px-4 py-3">{player.counts.Score}</td>
-                              <td className="px-4 py-3">{player.counts.Callahan}</td>
-                              <td className="px-4 py-3">{playerPoints(player.counts)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </details>
-                ))}
+                      <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                        {gamePlayers.map((player) => (
+                          <div
+                            key={`${game.id}-${player.team}-${player.name}`}
+                            className="flex items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-sm"
+                          >
+                            <div className="min-w-0">
+                              <span className="font-medium text-slate-900">{player.name}</span>
+                              <span className="ml-2 text-slate-400">{getTeamLabel(player.team)}</span>
+                            </div>
+                            <span className="font-semibold text-slate-700">{playerPoints(player.counts)} pts</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  );
+                })}
               </div>
             </div>
           </section>
@@ -1692,27 +1650,20 @@ export default function Home() {
               <div className="border-b border-slate-200 px-5 py-4">
                 <h3 className="text-lg font-semibold text-slate-900">Game history</h3>
               </div>
-              <div className="divide-y divide-slate-200">
+              <div className="divide-y divide-slate-100">
                 {completedGames.map((game) => (
-                  <div key={game.id} className="grid gap-4 px-5 py-4 md:grid-cols-4">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Date</p>
-                      <p className="mt-1 font-medium text-slate-900">{game.date}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Ended</p>
-                      <p className="mt-1 font-medium text-slate-900">{game.endedAt}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Length</p>
-                      <p className="mt-1 font-medium text-slate-900">{formatTime(game.timerSeconds)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">MPV</p>
-                      <p className="mt-1 font-medium text-slate-900">
-                        {game.bestPlayer.name} ({game.bestPlayer.percentage}%) · {getTeamLabel(game.bestPlayer.team)}
+                  <div key={game.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900">
+                        {getTeamLabel(game.matchup.home)} vs {getTeamLabel(game.matchup.away)}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        {game.date} · {formatTime(game.timerSeconds)}
                       </p>
                     </div>
+                    <p className="text-sm text-slate-600">
+                      MPV <span className="font-medium text-slate-900">{game.bestPlayer.name}</span>
+                    </p>
                   </div>
                 ))}
               </div>
