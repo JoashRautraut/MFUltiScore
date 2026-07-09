@@ -10,7 +10,9 @@
     "lint": "eslint",
     "setup:sheets": "node scripts/setup-env-from-json.mjs",
     "fix:env": "node scripts/fix-env-local.mjs",
-    "test:sheets": "node scripts/test-sheets-connection.mjs"
+    "test:sheets": "node scripts/test-sheets-connection.mjs",
+    "setup:hooks": "node scripts/install-git-hooks.mjs",
+    "prepare": "node scripts/install-git-hooks.mjs"
   },
   "dependencies": {
     "googleapis": "^173.0.0",

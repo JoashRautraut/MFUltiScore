@@ -441,6 +441,26 @@ export default function Home() {
     [matchup],
   );
 
+  useEffect(() => {
+    if (!liveGameActive) {
+      return;
+    }
+
+    setTeamPlayers((current) => {
+      const next = { ...current };
+
+      for (const key of matchupTeams) {
+        const assignedNames = teamSelections[key];
+        const existingByName = new Map(current[key].map((player) => [player.name, player]));
+        next[key] = assignedNames.map(
+          (name) => existingByName.get(name) ?? createPlayer(name, key),
+        );
+      }
+
+      return next;
+    });
+  }, [liveGameActive, matchupTeams, teamSelections]);
+
   const matchupPlayers = useMemo(
     () => ({
       home: teamPlayers[matchup.home],
