@@ -50,15 +50,15 @@ export function PlayerProgressChart({ games }: PlayerProgressChartProps) {
       : 320;
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-900">Game-by-game progress</h3>
-          <p className="mt-1 text-sm text-slate-500">
+          <h3 className="text-lg font-semibold text-white">Game-by-game progress</h3>
+          <p className="mt-1 text-sm text-slate-400">
             Points scored in each saved game, oldest to newest.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3 text-xs text-slate-600">
+        <div className="flex flex-wrap gap-3 text-xs text-slate-300">
           {STAT_TYPES.map((statType) => (
             <span key={statType} className="inline-flex items-center gap-1.5">
               <span
@@ -73,7 +73,7 @@ export function PlayerProgressChart({ games }: PlayerProgressChartProps) {
       </div>
 
       {chronologicalGames.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+        <div className="mt-6 rounded-2xl border border-dashed border-slate-700 bg-slate-950 px-5 py-10 text-center text-sm text-slate-400">
           No saved games yet. Play in a game and save it to see your progress chart here.
         </div>
       ) : (
@@ -95,14 +95,14 @@ export function PlayerProgressChart({ games }: PlayerProgressChartProps) {
                     y1={y}
                     x2={chartWidth - 8}
                     y2={y}
-                    stroke="#e2e8f0"
+                    stroke="#334155"
                     strokeDasharray="4 4"
                   />
                   <text
                     x={CHART_PADDING_LEFT - 8}
                     y={y + 4}
                     textAnchor="end"
-                    className="fill-slate-400 text-[11px]"
+                    className="fill-slate-500 text-[11px]"
                   >
                     {tick}
                   </text>
@@ -165,7 +165,7 @@ export function PlayerProgressChart({ games }: PlayerProgressChartProps) {
                       height={barHeight}
                       rx={6}
                       fill="transparent"
-                      stroke="#cbd5e1"
+                      stroke="#475569"
                       strokeWidth={1}
                     />
                   )}
@@ -174,7 +174,7 @@ export function PlayerProgressChart({ games }: PlayerProgressChartProps) {
                     x={x + BAR_WIDTH / 2}
                     y={barTop - 6}
                     textAnchor="middle"
-                    className="fill-slate-700 text-[11px] font-semibold"
+                    className="fill-slate-200 text-[11px] font-semibold"
                   >
                     {game.points}
                   </text>
@@ -183,7 +183,7 @@ export function PlayerProgressChart({ games }: PlayerProgressChartProps) {
                     x={x + BAR_WIDTH / 2}
                     y={CHART_HEIGHT + 18}
                     textAnchor="middle"
-                    className="fill-slate-500 text-[11px]"
+                    className="fill-slate-400 text-[11px]"
                   >
                     {formatShortDate(game.date)}
                   </text>

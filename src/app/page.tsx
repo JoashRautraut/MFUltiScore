@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PlayerProgressChart } from "@/components/PlayerProgressChart";
 import { HubPanelCard, PANEL_IMAGE_PATHS } from "@/components/HubPanelCard";
-import { ProfilePhotoAvatar, ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
+import { ProfilePhotoAvatar } from "@/components/ProfilePhotoPicker";
+import { ProfileScreen } from "@/components/ProfileScreen";
 import { fetchCompletedGames, fetchRegisteredUsers, fetchSheetPlayers, saveCompletedGame } from "@/lib/client-api";
 import { STAT_TYPES, StatType } from "@/types/stats";
 import { clearAuthUser, getAuthUser, isAdmin, toRegisteredPlayers, type AuthUser } from "@/lib/auth";
+import type { PublicUser } from "@/types/auth";
 import { clearLiveGameState, loadLiveGameState, saveLiveGameState } from "@/lib/live-game-storage";
 
 type Screen = "home" | "setup" | "live" | "summary" | "dashboard" | "profile";
@@ -149,21 +151,21 @@ function getTeamLabel(team: TeamKey) {
 
 function getTeamAccent(team: TeamKey) {
   const palette = [
-    { soft: "bg-blue-50", strong: "bg-blue-600", ring: "border-blue-300", badge: "bg-blue-100 text-blue-800", label: "text-blue-700" },
-    { soft: "bg-emerald-50", strong: "bg-emerald-600", ring: "border-emerald-300", badge: "bg-emerald-100 text-emerald-800", label: "text-emerald-700" },
-    { soft: "bg-amber-50", strong: "bg-amber-500", ring: "border-amber-300", badge: "bg-amber-100 text-amber-800", label: "text-amber-700" },
-    { soft: "bg-violet-50", strong: "bg-violet-600", ring: "border-violet-300", badge: "bg-violet-100 text-violet-800", label: "text-violet-700" },
-    { soft: "bg-rose-50", strong: "bg-rose-600", ring: "border-rose-300", badge: "bg-rose-100 text-rose-800", label: "text-rose-700" },
-    { soft: "bg-cyan-50", strong: "bg-cyan-600", ring: "border-cyan-300", badge: "bg-cyan-100 text-cyan-800", label: "text-cyan-700" },
-    { soft: "bg-orange-50", strong: "bg-orange-500", ring: "border-orange-300", badge: "bg-orange-100 text-orange-800", label: "text-orange-700" },
-    { soft: "bg-indigo-50", strong: "bg-indigo-600", ring: "border-indigo-300", badge: "bg-indigo-100 text-indigo-800", label: "text-indigo-700" },
-    { soft: "bg-lime-50", strong: "bg-lime-600", ring: "border-lime-300", badge: "bg-lime-100 text-lime-800", label: "text-lime-700" },
-    { soft: "bg-fuchsia-50", strong: "bg-fuchsia-600", ring: "border-fuchsia-300", badge: "bg-fuchsia-100 text-fuchsia-800", label: "text-fuchsia-700" },
-    { soft: "bg-sky-50", strong: "bg-sky-600", ring: "border-sky-300", badge: "bg-sky-100 text-sky-800", label: "text-sky-700" },
-    { soft: "bg-teal-50", strong: "bg-teal-600", ring: "border-teal-300", badge: "bg-teal-100 text-teal-800", label: "text-teal-700" },
-    { soft: "bg-pink-50", strong: "bg-pink-600", ring: "border-pink-300", badge: "bg-pink-100 text-pink-800", label: "text-pink-700" },
-    { soft: "bg-red-50", strong: "bg-red-600", ring: "border-red-300", badge: "bg-red-100 text-red-800", label: "text-red-700" },
-    { soft: "bg-yellow-50", strong: "bg-yellow-500", ring: "border-yellow-300", badge: "bg-yellow-100 text-yellow-800", label: "text-yellow-700" },
+    { soft: "bg-slate-900/80", strong: "bg-blue-600", ring: "border-blue-500/40", badge: "bg-blue-500/20 text-blue-200", label: "text-blue-300" },
+    { soft: "bg-slate-900/80", strong: "bg-emerald-600", ring: "border-emerald-500/40", badge: "bg-emerald-500/20 text-emerald-200", label: "text-emerald-300" },
+    { soft: "bg-slate-900/80", strong: "bg-amber-500", ring: "border-amber-500/40", badge: "bg-amber-500/20 text-amber-200", label: "text-amber-300" },
+    { soft: "bg-slate-900/80", strong: "bg-violet-600", ring: "border-violet-500/40", badge: "bg-violet-500/20 text-violet-200", label: "text-violet-300" },
+    { soft: "bg-slate-900/80", strong: "bg-rose-600", ring: "border-rose-500/40", badge: "bg-rose-500/20 text-rose-200", label: "text-rose-300" },
+    { soft: "bg-slate-900/80", strong: "bg-cyan-600", ring: "border-cyan-500/40", badge: "bg-cyan-500/20 text-cyan-200", label: "text-cyan-300" },
+    { soft: "bg-slate-900/80", strong: "bg-orange-500", ring: "border-orange-500/40", badge: "bg-orange-500/20 text-orange-200", label: "text-orange-300" },
+    { soft: "bg-slate-900/80", strong: "bg-indigo-600", ring: "border-indigo-500/40", badge: "bg-indigo-500/20 text-indigo-200", label: "text-indigo-300" },
+    { soft: "bg-slate-900/80", strong: "bg-lime-600", ring: "border-lime-500/40", badge: "bg-lime-500/20 text-lime-200", label: "text-lime-300" },
+    { soft: "bg-slate-900/80", strong: "bg-fuchsia-600", ring: "border-fuchsia-500/40", badge: "bg-fuchsia-500/20 text-fuchsia-200", label: "text-fuchsia-300" },
+    { soft: "bg-slate-900/80", strong: "bg-sky-600", ring: "border-sky-500/40", badge: "bg-sky-500/20 text-sky-200", label: "text-sky-300" },
+    { soft: "bg-slate-900/80", strong: "bg-teal-600", ring: "border-teal-500/40", badge: "bg-teal-500/20 text-teal-200", label: "text-teal-300" },
+    { soft: "bg-slate-900/80", strong: "bg-pink-600", ring: "border-pink-500/40", badge: "bg-pink-500/20 text-pink-200", label: "text-pink-300" },
+    { soft: "bg-slate-900/80", strong: "bg-red-600", ring: "border-red-500/40", badge: "bg-red-500/20 text-red-200", label: "text-red-300" },
+    { soft: "bg-slate-900/80", strong: "bg-yellow-500", ring: "border-yellow-500/40", badge: "bg-yellow-500/20 text-yellow-200", label: "text-yellow-300" },
   ];
   const index = TEAM_OPTIONS.findIndex((option) => option.key === team);
   return palette[index % palette.length];
@@ -212,13 +214,13 @@ function getBestPlayer(teamPlayers: Record<TeamKey, ActivePlayer[]>) {
 
 function getRankMedal(rank: number) {
   if (rank === 1) {
-    return { emoji: "🥇", rowClass: "bg-amber-50/80 ring-1 ring-amber-200", badgeClass: "bg-amber-100 text-amber-900" };
+    return { emoji: "🥇", rowClass: "bg-amber-500/10 ring-1 ring-amber-500/30", badgeClass: "bg-amber-500/20 text-amber-300" };
   }
   if (rank === 2) {
-    return { emoji: "🥈", rowClass: "bg-slate-50 ring-1 ring-slate-200", badgeClass: "bg-slate-200 text-slate-800" };
+    return { emoji: "🥈", rowClass: "bg-slate-800/80 ring-1 ring-slate-600", badgeClass: "bg-slate-700 text-slate-200" };
   }
   if (rank === 3) {
-    return { emoji: "🥉", rowClass: "bg-orange-50/80 ring-1 ring-orange-200", badgeClass: "bg-orange-100 text-orange-900" };
+    return { emoji: "🥉", rowClass: "bg-orange-500/10 ring-1 ring-orange-500/30", badgeClass: "bg-orange-500/20 text-orange-300" };
   }
   return null;
 }
@@ -249,6 +251,8 @@ export default function Home() {
   const [liveGameActive, setLiveGameActive] = useState(false);
   const [liveGameEnded, setLiveGameEnded] = useState(false);
   const [profilePhotoVersion, setProfilePhotoVersion] = useState(0);
+  const [dashboardTab, setDashboardTab] = useState<"male" | "female">("male");
+  const [registeredAccounts, setRegisteredAccounts] = useState<PublicUser[]>([]);
 
   const canResumeLiveGame = liveGameActive && !liveGameEnded;
 
@@ -346,6 +350,7 @@ export default function Home() {
         setCompletedGames(gamesMapped);
 
         const registeredPlayers = toRegisteredPlayers(registeredUsers);
+        setRegisteredAccounts(registeredUsers);
         const historicalPlayerNames = new Set<string>();
 
         for (const game of gamesMapped) {
@@ -700,6 +705,18 @@ export default function Home() {
   const bestMalePlayer = useMemo(() => maleRanking[0] ?? null, [maleRanking]);
   const bestFemalePlayer = useMemo(() => femaleRanking[0] ?? null, [femaleRanking]);
 
+  const playerUsernameByName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const account of registeredAccounts) {
+      map.set(account.playerName.trim().toLowerCase(), account.username);
+    }
+    return map;
+  }, [registeredAccounts]);
+
+  function getUsernameForPlayer(playerName: string) {
+    return playerUsernameByName.get(playerName.trim().toLowerCase()) ?? "";
+  }
+
   const personalProgress = useMemo(() => {
     if (!authUser) {
       return null;
@@ -946,14 +963,14 @@ export default function Home() {
       <div
         key={player}
         className={`flex flex-col gap-3 rounded-2xl border p-4 md:flex-row md:items-center md:justify-between ${
-          accent ? `${accent.ring} ${accent.soft} border-2` : "border-slate-200 bg-white"
+          accent ? `border-2 ${accent.ring} ${accent.soft}` : "border-slate-700 bg-slate-900"
         }`}
       >
         <div className="flex items-center gap-3">
           {accent && <span className={`h-10 w-1.5 rounded-full ${accent.strong}`} />}
           <div>
-            <p className="font-medium text-slate-900">{player}</p>
-            <p className="text-sm text-slate-500">
+            <p className="font-medium text-white">{player}</p>
+            <p className="text-sm text-slate-300">
               {assignment === null
                 ? "No team assigned"
                 : `Assigned to ${getTeamLabel(assignment)}`}
@@ -976,8 +993,8 @@ export default function Home() {
               const value = event.target.value;
               assignPlayer(player, value === "" ? null : (value as TeamKey));
             }}
-            className={`w-full rounded-xl border bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none focus:border-slate-400 ${
-              accent ? accent.ring : "border-slate-200"
+            className={`w-full rounded-xl border bg-slate-950 px-3 py-2 text-sm font-medium text-white outline-none focus:border-blue-400 ${
+              accent ? accent.ring : "border-slate-700"
             }`}
           >
             <option value="">No team</option>
@@ -998,8 +1015,8 @@ export default function Home() {
       <section className={`space-y-3 rounded-3xl border p-4 shadow-sm ${accent.ring} ${accent.soft}`}>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-slate-900">{label}</h3>
-            <p className="text-sm text-slate-500">{players.length} active players</p>
+            <h3 className={`text-lg font-semibold ${accent.label}`}>{label}</h3>
+            <p className="text-sm text-slate-400">{players.length} active players</p>
           </div>
           <span className={`rounded-full px-3 py-1 text-sm font-medium text-white ${accent.strong}`}>
             {label}
@@ -1007,18 +1024,18 @@ export default function Home() {
         </div>
 
         {players.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-slate-600 bg-slate-950/40 p-4 text-sm text-slate-400">
             No players assigned.
           </div>
         ) : (
           players.map((player) => (
-            <article key={player.name} className="rounded-2xl border border-slate-200 p-4">
+            <article key={player.name} className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
               <div className="mb-3 flex items-center justify-between">
                 <div>
-                  <h4 className="text-lg font-semibold text-slate-900">{player.name}</h4>
-                  <p className="text-sm text-slate-500">Total actions: {totalCounts(player.counts)}</p>
+                  <h4 className="text-lg font-semibold text-white">{player.name}</h4>
+                  <p className="text-sm text-slate-400">Total actions: {totalCounts(player.counts)}</p>
                 </div>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+                <span className="rounded-full bg-slate-800 px-3 py-1 text-sm font-medium text-slate-200">
                   {playerPoints(player.counts)} pts
                 </span>
               </div>
@@ -1043,28 +1060,66 @@ export default function Home() {
     );
   }
 
-  function renderBestPlayerCard(player: DashboardPlayer | null, accentClass: string) {
+  function renderTopRankHero(player: DashboardPlayer | null, gender: "male" | "female") {
+    const accent =
+      gender === "male"
+        ? {
+            gradient: "from-blue-600/25 via-slate-900 to-slate-950",
+            ring: "ring-blue-500/35",
+            label: "text-blue-300",
+            glow: "shadow-blue-500/20",
+          }
+        : {
+            gradient: "from-pink-600/25 via-slate-900 to-slate-950",
+            ring: "ring-pink-500/35",
+            label: "text-pink-300",
+            glow: "shadow-pink-500/20",
+          };
+
     if (!player) {
-      return <p className="mt-3 text-sm text-slate-500">No records yet.</p>;
+      return (
+        <div className="flex min-h-[148px] items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/50 p-5 text-sm text-slate-500">
+          No {gender} #1 yet
+        </div>
+      );
     }
 
+    const username = getUsernameForPlayer(player.name);
+
     return (
-      <div className="mt-3 grid gap-3 sm:grid-cols-4">
-        <div className={`rounded-2xl p-4 ${accentClass}`}>
-          <p className="text-sm text-slate-500">Player</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{player.name}</p>
+      <div
+        className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${accent.gradient} p-4 shadow-lg ${accent.glow} ring-1 ${accent.ring}`}
+      >
+        <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-amber-400/10 blur-2xl" />
+        <div className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/20 text-lg ring-1 ring-amber-400/40">
+          🥇
         </div>
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-sm text-slate-500">Total points</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{player.points}</p>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-sm text-slate-500">MPV wins</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{player.bestPlayerWins}</p>
-        </div>
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-sm text-slate-500">Top contribution</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{player.topPercentage}%</p>
+
+        <div className="flex items-center gap-4">
+          <div className="relative shrink-0">
+            <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-amber-300 to-amber-600 opacity-80" />
+            <ProfilePhotoAvatar
+              key={`${username}-${player.name}-${profilePhotoVersion}`}
+              username={username || player.name}
+              playerName={player.name}
+              className="relative h-20 w-20 ring-4 ring-slate-950"
+            />
+          </div>
+
+          <div className="min-w-0 flex-1 pr-8">
+            <p className={`text-xs font-semibold uppercase tracking-wider ${accent.label}`}>
+              #{1} {gender === "male" ? "Male" : "Female"}
+            </p>
+            <h3 className="truncate text-xl font-bold text-white">{player.name}</h3>
+            <p className="mt-1 text-sm text-slate-300">
+              {player.points} pts · {player.games} games
+            </p>
+            {player.bestPlayerWins > 0 && (
+              <span className="mt-2 inline-block rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
+                {player.bestPlayerWins} MPV
+              </span>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -1075,7 +1130,7 @@ export default function Home() {
 
     if (players.length === 0) {
       return (
-        <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+        <div className="rounded-2xl bg-slate-950 p-4 text-sm text-slate-400">
           No players in this category yet.
         </div>
       );
@@ -1092,27 +1147,27 @@ export default function Home() {
             <div
               key={player.name}
               className={`grid grid-cols-[44px_1fr_auto] items-center gap-3 rounded-2xl px-3 py-2.5 sm:grid-cols-[52px_minmax(0,140px)_1fr_auto] ${
-                medal?.rowClass ?? ""
+                medal?.rowClass ?? "bg-slate-900/60"
               }`}
             >
               <div
                 className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${
-                  medal ? medal.badgeClass : "bg-slate-100 text-sm font-semibold text-slate-600"
+                  medal ? medal.badgeClass : "bg-slate-800 text-sm font-semibold text-slate-200"
                 }`}
               >
                 {medal ? medal.emoji : rank}
               </div>
               <div className="min-w-0">
-                <p className="truncate font-medium text-slate-900">{player.name}</p>
-                <p className="text-xs text-slate-500">{player.games} games · {player.bestPlayerWins} MPV</p>
+                <p className="truncate font-medium text-white">{player.name}</p>
+                <p className="text-xs text-slate-400">{player.games} games · {player.bestPlayerWins} MPV</p>
               </div>
-              <div className="hidden h-2 rounded-full bg-slate-100 p-0.5 sm:block">
+              <div className="hidden h-2 rounded-full bg-slate-800 p-0.5 sm:block">
                 <div
                   className={`h-full rounded-full ${barColorClass}`}
                   style={{ width: `${widthPercent}%` }}
                 />
               </div>
-              <div className="whitespace-nowrap text-sm font-semibold text-slate-700">
+              <div className="whitespace-nowrap text-sm font-semibold text-slate-200">
                 {player.points} pts
               </div>
             </div>
@@ -1124,34 +1179,35 @@ export default function Home() {
 
   if (isAuthChecking) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-white px-4">
-        <p className="text-sm text-slate-500">Loading...</p>
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+        <p className="text-sm text-slate-400">Loading...</p>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-white pb-28 text-slate-900">
-      <div className="mx-auto w-full max-w-lg px-4 pt-6 sm:max-w-xl">
-        <header className="mb-6 flex items-start justify-between gap-4">
+    <main className="min-h-screen bg-slate-950 pb-28 text-white">
+      <div className={`mx-auto w-full max-w-lg sm:max-w-xl ${screen === "profile" ? "px-0 pt-0" : "px-4 pt-6"}`}>
+        {screen !== "profile" && (
+        <header className="mb-6 flex items-start justify-between gap-4 rounded-[2rem] border border-slate-800 bg-slate-900/90 px-5 py-5 shadow-xl">
           <div className="min-w-0">
             {screen !== "home" && (
               <button
                 type="button"
                 onClick={() => setScreen("home")}
-                className="mb-2 text-sm font-medium text-slate-500 transition hover:text-slate-800"
+                className="mb-2 text-sm font-medium text-slate-400 transition hover:text-white"
               >
                 ← Back
               </button>
             )}
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
               Ultimate Frisbee
             </p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+            <h1 className="mt-1 text-3xl font-bold tracking-tight text-white">
               {SCREEN_TITLES[screen]}
             </h1>
             {screen === "home" && (
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-sm text-slate-400">
                 Choose a panel to manage games, stats, and your profile.
               </p>
             )}
@@ -1172,7 +1228,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => router.push("/admin")}
-                className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700"
+                className="rounded-full bg-violet-500/15 px-3 py-1 text-xs font-medium text-violet-300"
               >
                 Admin
               </button>
@@ -1180,12 +1236,13 @@ export default function Home() {
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
+              className="rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-200"
             >
               Log out
             </button>
           </div>
         </header>
+        )}
 
         {screen === "home" && (
           <section className="space-y-4">
@@ -1206,28 +1263,28 @@ export default function Home() {
         {userIsAdmin && screen === "setup" && (
           <section className="grid gap-4 xl:grid-cols-[1fr_1.7fr]">
             <div className="space-y-4">
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-sm font-medium text-slate-500">Step 1</p>
-                <h2 className="mt-1 text-2xl font-semibold text-slate-900">Prepare the game</h2>
-                <p className="mt-2 text-sm text-slate-600">
+              <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
+                <p className="text-sm font-medium text-slate-400">Step 1</p>
+                <h2 className="mt-1 text-2xl font-semibold text-white">Prepare the game</h2>
+                <p className="mt-2 text-sm text-slate-300">
                   Registered players are added to the roster automatically. Assign each player to a team, or leave them unassigned.
                 </p>
               </div>
 
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-600">Game date</span>
+                  <span className="text-sm font-medium text-slate-300">Game date</span>
                   <input
                     type="date"
                     value={date}
                     onChange={(event) => setDate(event.target.value)}
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
+                    className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-400"
                   />
                 </label>
 
                 <div className="mt-4">
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-600">Match timer (minutes)</span>
+                    <span className="text-sm font-medium text-slate-300">Match timer (minutes)</span>
                     <input
                       type="number"
                       min={1}
@@ -1236,23 +1293,23 @@ export default function Home() {
                       placeholder="Enter minutes (e.g. 20)"
                       value={gameDurationMinutes}
                       onChange={(event) => handleGameDurationMinutesChange(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
+                      className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-400"
                     />
                   </label>
                   {!parsedDurationMinutes && gameDurationMinutes.trim() !== "" && (
                     <p className="mt-2 text-sm text-red-600">Enter a valid number of minutes greater than 0.</p>
                   )}
                   {!gameDurationMinutes.trim() && (
-                    <p className="mt-2 text-sm text-slate-500">Set how long the countdown should run before you start.</p>
+                    <p className="mt-2 text-sm text-slate-400">Set how long the countdown should run before you start.</p>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-sm font-medium text-slate-600">Who is playing?</p>
+              <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
+                <p className="text-sm font-medium text-slate-300">Who is playing?</p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
                   <label className="block">
-                    <span className="text-sm text-slate-500">Team</span>
+                    <span className="text-sm text-slate-400">Team</span>
                     <select
                       value={matchup.home}
                       onChange={(event) => {
@@ -1262,7 +1319,7 @@ export default function Home() {
                           away: current.away === nextHome ? getDifferentTeam(nextHome) : current.away,
                         }));
                       }}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+                      className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-400"
                     >
                       {TEAM_OPTIONS.map((option) => (
                         <option key={option.key} value={option.key}>
@@ -1277,7 +1334,7 @@ export default function Home() {
                   </div>
 
                   <label className="block">
-                    <span className="text-sm text-slate-500">Team</span>
+                    <span className="text-sm text-slate-400">Team</span>
                     <select
                       value={matchup.away}
                       onChange={(event) => {
@@ -1287,7 +1344,7 @@ export default function Home() {
                           away: nextAway,
                         }));
                       }}
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-400"
+                      className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-400"
                     >
                       {TEAM_OPTIONS.map((option) => (
                         <option key={option.key} value={option.key}>
@@ -1315,7 +1372,7 @@ export default function Home() {
                           className={`rounded-3xl border p-4 shadow-sm ${accent.ring} ${accent.soft}`}
                         >
                           <p className={`text-sm font-medium ${accent.label}`}>{option.label}</p>
-                          <p className="mt-2 text-3xl font-semibold text-slate-900">
+                          <p className="mt-2 text-3xl font-semibold text-white">
                             {teamSelections[option.key].length}
                           </p>
                         </div>
@@ -1329,7 +1386,7 @@ export default function Home() {
                 type="button"
                 onClick={() => (canResumeLiveGame ? setScreen("live") : startLiveGame())}
                 disabled={!canResumeLiveGame && (matchup.home === matchup.away || !parsedDurationMinutes)}
-                className="w-full rounded-3xl bg-blue-600 px-5 py-4 text-lg font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="w-full rounded-3xl bg-blue-500 px-5 py-4 text-lg font-semibold text-white shadow-lg disabled:cursor-not-allowed disabled:bg-slate-700"
               >
                 {canResumeLiveGame
                   ? "Back to live game"
@@ -1339,12 +1396,12 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
               <div className="mb-4">
-                <p className="text-sm font-medium text-slate-500">Player assignment</p>
-                <h2 className="mt-1 text-2xl font-semibold text-slate-900">Choose each player&apos;s team</h2>
+                <p className="text-sm font-medium text-slate-400">Player assignment</p>
+                <h2 className="mt-1 text-2xl font-semibold text-white">Choose each player&apos;s team</h2>
                 {canResumeLiveGame && (
-                  <p className="mt-2 text-sm text-blue-700">
+                  <p className="mt-2 text-sm text-blue-300">
                     Game in progress — assign a player to {getTeamLabel(matchup.home)} or{" "}
                     {getTeamLabel(matchup.away)} here to add them to the live game.
                   </p>
@@ -1353,53 +1410,53 @@ export default function Home() {
 
               <div className="mb-4">
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-600">Search players</span>
+                  <span className="text-sm font-medium text-slate-300">Search players</span>
                   <input
                     value={playerSearch}
                     onChange={(event) => setPlayerSearch(event.target.value)}
                     placeholder="Search by player name"
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
+                    className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-400"
                   />
                 </label>
               </div>
 
               <div className="space-y-6">
                 {filteredSetupPlayers.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                  <div className="rounded-2xl border border-dashed border-slate-600 bg-slate-950/40 p-4 text-sm text-slate-400">
                     {playerSearch.trim()
                       ? "No players match your search."
                       : "No players in the roster yet. Register an account or add players to the Players sheet."}
                   </div>
                 ) : (
                   <>
-                    <section className="rounded-2xl border border-blue-200 bg-blue-50/40 p-4">
+                    <section className="rounded-2xl border border-blue-500/30 bg-slate-900/80 p-4">
                       <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-blue-900">Male players</h3>
-                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+                        <h3 className="text-lg font-semibold text-blue-300">Male players</h3>
+                        <span className="rounded-full bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-200">
                           {filteredMalePlayers.length}
                         </span>
                       </div>
                       <div className="grid gap-3">
                         {filteredMalePlayers.map((player) => renderSetupPlayerRow(player))}
                         {filteredMalePlayers.length === 0 && (
-                          <div className="rounded-2xl border border-dashed border-blue-200 bg-white p-4 text-sm text-slate-500">
+                          <div className="rounded-2xl border border-dashed border-blue-500/30 bg-slate-950/40 p-4 text-sm text-slate-400">
                             No male players match your search.
                           </div>
                         )}
                       </div>
                     </section>
 
-                    <section className="rounded-2xl border border-pink-200 bg-pink-50/40 p-4">
+                    <section className="rounded-2xl border border-pink-500/30 bg-slate-900/80 p-4">
                       <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-pink-900">Female players</h3>
-                        <span className="rounded-full bg-pink-100 px-3 py-1 text-xs font-medium text-pink-800">
+                        <h3 className="text-lg font-semibold text-pink-300">Female players</h3>
+                        <span className="rounded-full bg-pink-500/20 px-3 py-1 text-xs font-medium text-pink-200">
                           {filteredFemalePlayers.length}
                         </span>
                       </div>
                       <div className="grid gap-3">
                         {filteredFemalePlayers.map((player) => renderSetupPlayerRow(player))}
                         {filteredFemalePlayers.length === 0 && (
-                          <div className="rounded-2xl border border-dashed border-pink-200 bg-white p-4 text-sm text-slate-500">
+                          <div className="rounded-2xl border border-dashed border-pink-500/30 bg-slate-950/40 p-4 text-sm text-slate-400">
                             No female players match your search.
                           </div>
                         )}
@@ -1414,23 +1471,23 @@ export default function Home() {
 
         {userIsAdmin && screen === "live" && (
           <section className="space-y-4">
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-500">Live game</p>
-                  <h2 className="mt-1 text-2xl font-semibold text-slate-900">
+                  <p className="text-sm font-medium text-slate-400">Live game</p>
+                  <h2 className="mt-1 text-2xl font-semibold text-white">
                     {getTeamLabel(matchup.home)} vs {getTeamLabel(matchup.away)}
                   </h2>
-                  <p className="mt-1 text-sm text-slate-600">{date}</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-800">
+                  <p className="mt-1 text-sm text-slate-300">{date}</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-100">
                     Score: {matchupScore.home} - {matchupScore.away}
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <div className="rounded-2xl border border-slate-200 px-4 py-3 text-center">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Time left</p>
-                    <p className="text-2xl font-semibold text-slate-900">{formatTime(timerSeconds)}</p>
+                  <div className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-center">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Time left</p>
+                    <p className="text-2xl font-semibold text-white">{formatTime(timerSeconds)}</p>
                   </div>
                   <button
                     type="button"
@@ -1442,7 +1499,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={undoLastEntry}
-                    className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-medium text-slate-900"
+                    className="rounded-2xl bg-slate-800 px-4 py-3 text-sm font-medium text-white"
                   >
                     Undo last
                   </button>
@@ -1464,38 +1521,38 @@ export default function Home() {
               </div>
 
               <aside className="space-y-4">
-                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <h3 className="text-lg font-semibold text-slate-900">Recent activity</h3>
+                <section className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
+                  <h3 className="text-lg font-semibold text-white">Recent activity</h3>
                   <div className="mt-3 space-y-2">
                     {logEntries.length === 0 ? (
-                      <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
+                      <div className="rounded-2xl bg-slate-950 p-4 text-sm text-slate-400">
                         No actions yet. Tap a stat button to start logging.
                       </div>
                     ) : (
                       logEntries.slice(0, 6).map((entry) => (
                         <div
                           key={entry.id}
-                          className="flex items-center justify-between rounded-2xl bg-slate-50 p-3"
+                          className="flex items-center justify-between rounded-2xl bg-slate-950 p-3"
                         >
                           <div>
-                            <p className="font-medium text-slate-900">{entry.playerName}</p>
-                            <p className="text-sm text-slate-500">
+                            <p className="font-medium text-white">{entry.playerName}</p>
+                            <p className="text-sm text-slate-400">
                               {getTeamLabel(entry.team)} · {entry.statType}
                             </p>
                           </div>
-                          <span className="text-sm font-medium text-slate-500">{entry.timestampLabel}</span>
+                          <span className="text-sm font-medium text-slate-400">{entry.timestampLabel}</span>
                         </div>
                       ))
                     )}
                   </div>
                 </section>
 
-                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <h3 className="text-lg font-semibold text-slate-900">MPV today</h3>
-                  <p className="mt-3 text-3xl font-semibold text-slate-900">
+                <section className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
+                  <h3 className="text-lg font-semibold text-white">MPV today</h3>
+                  <p className="mt-3 text-3xl font-semibold text-white">
                     {bestPlayerToday.name}
                   </p>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-slate-400">
                     {bestPlayerToday.percentage}% of weighted contributions
                   </p>
                 </section>
@@ -1508,37 +1565,37 @@ export default function Home() {
           <section className="space-y-4">
             {userIsAdmin ? (
               <>
-                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-sm font-medium text-slate-500">Step 3</p>
-                  <h2 className="mt-1 text-2xl font-semibold text-slate-900">Review before saving</h2>
-                  <p className="mt-2 text-sm text-slate-600">
+                <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
+                  <p className="text-sm font-medium text-slate-400">Step 3</p>
+                  <h2 className="mt-1 text-2xl font-semibold text-white">Review before saving</h2>
+                  <p className="mt-2 text-sm text-slate-300">
                     Check the totals, confirm the timer, and save the game to the dashboard.
                   </p>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">Date</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">{date}</p>
+                  <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-4 shadow-xl">
+                    <p className="text-sm text-slate-400">Date</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{date}</p>
                   </div>
-                  <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">Game length</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">{formatTime(elapsedSeconds)}</p>
+                  <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-4 shadow-xl">
+                    <p className="text-sm text-slate-400">Game length</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{formatTime(elapsedSeconds)}</p>
                   </div>
-                  <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <p className="text-sm text-slate-500">MPV</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">
+                  <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-4 shadow-xl">
+                    <p className="text-sm text-slate-400">MPV</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">
                       {bestPlayerToday.name} ({bestPlayerToday.percentage}%)
                     </p>
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-4 shadow-xl">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-slate-600">Players</p>
-                    <p className="text-xs text-slate-500">{allActivePlayers.length} total</p>
+                    <p className="text-sm font-medium text-slate-300">Players</p>
+                    <p className="text-xs text-slate-400">{allActivePlayers.length} total</p>
                   </div>
-                  <div className="divide-y divide-slate-100">
+                  <div className="divide-y divide-slate-800">
                     {[...allActivePlayers]
                       .sort((a, b) => playerPoints(b.counts) - playerPoints(a.counts))
                       .map((player) => (
@@ -1547,12 +1604,12 @@ export default function Home() {
                           className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
                         >
                           <div className="min-w-0">
-                            <p className="truncate font-medium text-slate-900">{player.name}</p>
-                            <p className="text-xs text-slate-500">{getTeamLabel(player.team)}</p>
+                            <p className="truncate font-medium text-white">{player.name}</p>
+                            <p className="text-xs text-slate-400">{getTeamLabel(player.team)}</p>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold text-slate-900">{playerPoints(player.counts)} pts</p>
-                            <p className="text-xs text-slate-500">
+                            <p className="font-semibold text-white">{playerPoints(player.counts)} pts</p>
+                            <p className="text-xs text-slate-400">
                               {player.counts.Score}G · {player.counts.Assist}A · {player.counts.Block}B
                               {player.counts.Callahan > 0 ? ` · ${player.counts.Callahan}C` : ""}
                             </p>
@@ -1569,7 +1626,7 @@ export default function Home() {
                       setTimerRunning(timerSeconds > 0);
                       setScreen("live");
                     }}
-                    className="rounded-2xl bg-slate-100 px-5 py-3 font-medium text-slate-900"
+                    className="rounded-2xl bg-slate-800 px-5 py-3 font-medium text-white"
                   >
                     Back to live game
                   </button>
@@ -1577,7 +1634,7 @@ export default function Home() {
                     type="button"
                     onClick={saveGame}
                     disabled={isSavingGame}
-                    className="rounded-2xl bg-blue-600 px-5 py-3 font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                    className="rounded-2xl bg-blue-500 px-5 py-3 font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-700"
                   >
                     {isSavingGame ? "Saving to Google Sheets..." : "Save summary record"}
                   </button>
@@ -1587,31 +1644,31 @@ export default function Home() {
                 )}
               </>
             ) : (
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-sm font-medium text-slate-500">Summary</p>
-                <h2 className="mt-1 text-2xl font-semibold text-slate-900">Game summary records</h2>
-                <p className="mt-2 text-sm text-slate-600">
+              <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
+                <p className="text-sm font-medium text-slate-400">Summary</p>
+                <h2 className="mt-1 text-2xl font-semibold text-white">Game summary records</h2>
+                <p className="mt-2 text-sm text-slate-300">
                   View saved game results below. Only admins can save new summary records.
                 </p>
               </div>
             )}
 
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-5 py-4">
-                <h3 className="text-lg font-semibold text-slate-900">Summary records</h3>
-                <p className="mt-1 text-sm text-slate-500">
+            <div className="overflow-hidden rounded-[2rem] border border-slate-800 bg-slate-900/90 shadow-xl">
+              <div className="border-b border-slate-800 px-5 py-4">
+                <h3 className="text-lg font-semibold text-white">Summary records</h3>
+                <p className="mt-1 text-sm text-slate-400">
                   Tap a game to see player points. Full stat breakdown is hidden by default.
                 </p>
               </div>
               <div className="divide-y divide-slate-100">
                 {isLoadingGames && (
-                  <div className="px-5 py-8 text-sm text-slate-500">Loading saved games from Google Sheets...</div>
+                  <div className="px-5 py-8 text-sm text-slate-400">Loading saved games from Google Sheets...</div>
                 )}
                 {!isLoadingGames && gamesLoadError && (
                   <div className="px-5 py-8 text-sm text-red-600">{gamesLoadError}</div>
                 )}
                 {!isLoadingGames && !gamesLoadError && completedGames.length === 0 && (
-                  <div className="px-5 py-8 text-sm text-slate-500">
+                  <div className="px-5 py-8 text-sm text-slate-400">
                     No saved games yet. Play a game and save it to store data in Google Sheets.
                   </div>
                 )}
@@ -1624,10 +1681,10 @@ export default function Home() {
                     <details key={game.id} className="group px-5 py-3">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-1">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium text-slate-900">
+                          <p className="font-medium text-white">
                             {getTeamLabel(game.matchup.home)} vs {getTeamLabel(game.matchup.away)}
                           </p>
-                          <p className="mt-0.5 text-sm text-slate-500">
+                          <p className="mt-0.5 text-sm text-slate-400">
                             {game.date} · {formatTime(game.timerSeconds)} · MPV {game.bestPlayer.name}
                           </p>
                         </div>
@@ -1639,17 +1696,17 @@ export default function Home() {
                         </span>
                       </summary>
 
-                      <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+                      <div className="mt-2 space-y-1 border-t border-slate-800 pt-2">
                         {gamePlayers.map((player) => (
                           <div
                             key={`${game.id}-${player.team}-${player.name}`}
                             className="flex items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-sm"
                           >
                             <div className="min-w-0">
-                              <span className="font-medium text-slate-900">{player.name}</span>
+                              <span className="font-medium text-white">{player.name}</span>
                               <span className="ml-2 text-slate-400">{getTeamLabel(player.team)}</span>
                             </div>
-                            <span className="font-semibold text-slate-700">{playerPoints(player.counts)} pts</span>
+                            <span className="font-semibold text-slate-200">{playerPoints(player.counts)} pts</span>
                           </div>
                         ))}
                       </div>
@@ -1662,201 +1719,133 @@ export default function Home() {
         )}
 
         {screen === "dashboard" && (
-          <section className="space-y-4">
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-sm font-medium text-slate-500">Dashboard</p>
-              <h2 className="mt-1 text-2xl font-semibold text-slate-900">Saved game results</h2>
-              <p className="mt-2 text-sm text-slate-600">
-                View player totals, best male and female players, and game history in one clean overview.
-              </p>
+          <section className="-mx-4 overflow-hidden rounded-[2rem] bg-slate-950 text-white shadow-2xl sm:mx-0">
+            <div className="px-4 pt-5">
+              <p className="text-sm text-slate-400">MFULTISCORE</p>
+              <h2 className="text-2xl font-bold">Dashboard</h2>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-900">Best male player</h3>
-                {renderBestPlayerCard(bestMalePlayer, "bg-blue-50")}
-              </div>
-
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-900">Best female player</h3>
-                {renderBestPlayerCard(bestFemalePlayer, "bg-pink-50")}
-              </div>
+            <div className="grid gap-3 px-4 py-4 sm:grid-cols-2">
+              {renderTopRankHero(bestMalePlayer, "male")}
+              {renderTopRankHero(bestFemalePlayer, "female")}
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-900">Male ranking</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Male players ranked by total points across all saved games.
-                </p>
-                <div className="mt-4">{renderRankingList(maleRanking, "bg-blue-600")}</div>
+            <div className="grid grid-cols-4 gap-2 px-4 pb-4">
+              <div className="rounded-2xl bg-slate-900/90 p-3 text-center">
+                <p className="text-2xl font-bold text-blue-400">{completedGames.length}</p>
+                <p className="mt-1 text-xs text-slate-400">Games</p>
               </div>
-
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-900">Female ranking</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Female players ranked by total points across all saved games.
-                </p>
-                <div className="mt-4">{renderRankingList(femaleRanking, "bg-pink-500")}</div>
+              <div className="rounded-2xl bg-slate-900/90 p-3 text-center">
+                <p className="text-2xl font-bold text-emerald-400">{dashboardPlayers.length}</p>
+                <p className="mt-1 text-xs text-slate-400">Players</p>
+              </div>
+              <div className="rounded-2xl bg-slate-900/90 p-3 text-center">
+                <p className="text-2xl font-bold text-amber-400">{bestMalePlayer?.points ?? 0}</p>
+                <p className="mt-1 text-xs text-slate-400">Male pts</p>
+              </div>
+              <div className="rounded-2xl bg-slate-900/90 p-3 text-center">
+                <p className="text-2xl font-bold text-rose-400">{bestFemalePlayer?.points ?? 0}</p>
+                <p className="mt-1 text-xs text-slate-400">Female pts</p>
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-5 py-4">
-                <h3 className="text-lg font-semibold text-slate-900">Game history</h3>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {completedGames.map((game) => (
-                  <div key={game.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
-                    <div className="min-w-0">
-                      <p className="font-medium text-slate-900">
-                        {getTeamLabel(game.matchup.home)} vs {getTeamLabel(game.matchup.away)}
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {game.date} · {formatTime(game.timerSeconds)}
-                      </p>
-                    </div>
-                    <p className="text-sm text-slate-600">
-                      MPV <span className="font-medium text-slate-900">{game.bestPlayer.name}</span>
-                    </p>
-                  </div>
+            <div className="px-4 pb-2">
+              <div className="flex rounded-full bg-slate-900 p-1">
+                {(
+                  [
+                    ["male", "Male"],
+                    ["female", "Female"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setDashboardTab(value)}
+                    className={`flex-1 rounded-full px-3 py-2 text-sm font-medium transition ${
+                      dashboardTab === value
+                        ? "bg-white text-slate-900"
+                        : "text-slate-300 hover:text-white"
+                    }`}
+                  >
+                    {label}
+                  </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="space-y-4 px-4 pb-6 pt-3">
+              <div className="rounded-2xl bg-slate-900/80 p-4">
+                <h3 className="text-lg font-semibold">
+                  {dashboardTab === "male" ? "Male" : "Female"} ranking
+                </h3>
+                <div className="mt-4">
+                  {renderRankingList(
+                    dashboardTab === "male" ? maleRanking : femaleRanking,
+                    dashboardTab === "male" ? "bg-blue-500" : "bg-pink-500",
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-3 text-lg font-semibold">Recent games</h3>
+                {completedGames.length === 0 ? (
+                  <p className="rounded-2xl bg-slate-900/80 p-4 text-sm text-slate-400">
+                    No saved games yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {completedGames.slice(0, 6).map((game) => (
+                      <div
+                        key={game.id}
+                        className="flex items-center justify-between rounded-2xl bg-slate-900/80 px-4 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {getTeamLabel(game.matchup.home)} vs {getTeamLabel(game.matchup.away)}
+                          </p>
+                          <p className="text-sm text-slate-400">
+                            {game.date} · {formatTime(game.timerSeconds)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-white">{game.bestPlayer.name}</p>
+                          <span className="text-xs font-medium text-amber-400">MPV</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </section>
         )}
 
         {screen === "profile" && personalProgress && authUser && (
-          <section className="space-y-4">
-            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-col items-center text-center">
-                <ProfilePhotoPicker
-                  username={authUser.username}
-                  playerName={authUser.playerName}
-                  onPhotoChange={() => setProfilePhotoVersion((current) => current + 1)}
-                />
-                <h2 className="mt-4 text-2xl font-bold text-slate-900">{authUser.playerName}</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  @{authUser.username} · {authUser.gender === "female" ? "Female" : "Male"}
-                  {authUser.role === "admin" ? " · Admin" : ""}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-sm text-slate-500">Total points</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-900">{personalProgress.totalPoints}</p>
-              </div>
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-sm text-slate-500">Games played</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-900">{personalProgress.gamesPlayed}</p>
-              </div>
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-sm text-slate-500">MPV wins</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-900">{personalProgress.mvpWins}</p>
-              </div>
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-sm text-slate-500">
-                  {authUser.gender === "female" ? "Female" : "Male"} ranking
-                </p>
-                <p className="mt-2 text-3xl font-semibold text-slate-900">
-                  {personalProgress.genderRank
-                    ? `#${personalProgress.genderRank}`
-                    : "—"}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  of {personalProgress.genderPoolSize} players
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-900">Career stats</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                {personalProgress.totalActions} total actions across all saved games.
-              </p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {STAT_TYPES.map((statType) => (
-                  <div key={statType} className="rounded-2xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">{statType}</p>
-                    <p className="mt-1 text-2xl font-semibold text-slate-900">
-                      {personalProgress.statsTotals[statType]}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <PlayerProgressChart games={personalProgress.gameHistory} />
-
-            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-5 py-4">
-                <h3 className="text-lg font-semibold text-slate-900">Your game history</h3>
-                <p className="mt-1 text-sm text-slate-500">Personal results from every saved game you played in.</p>
-              </div>
-
-              {personalProgress.gameHistory.length === 0 ? (
-                <div className="px-5 py-8 text-sm text-slate-500">
-                  No saved games yet. Once you play in a game and it is saved, your progress will show here.
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-200">
-                  {personalProgress.gameHistory.map((game) => {
-                    const accent = getTeamAccent(game.team);
-                    return (
-                      <div key={game.gameId} className="px-5 py-4">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                          <div>
-                            <p className="font-medium text-slate-900">{game.matchupLabel}</p>
-                            <p className="mt-1 text-sm text-slate-500">
-                              {game.date} · Ended {game.endedAt}
-                            </p>
-                            <span className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${accent.badge}`}>
-                              {getTeamLabel(game.team)}
-                            </span>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
-                              {game.points} pts
-                            </span>
-                            {game.wasMvp && (
-                              <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">
-                                MPV · {game.mvpPercentage}%
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          {STAT_TYPES.map((statType) => (
-                            <div key={statType} className="rounded-xl bg-slate-50 px-3 py-2 text-sm">
-                              <span className="text-slate-500">{statType}</span>
-                              <span className="ml-2 font-semibold text-slate-900">{game.counts[statType]}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </section>
+          <div className="px-4 pt-4">
+            <ProfileScreen
+            authUser={authUser}
+            personalProgress={personalProgress}
+            profilePhotoVersion={profilePhotoVersion}
+            onPhotoChange={() => setProfilePhotoVersion((current) => current + 1)}
+            onBack={() => setScreen("home")}
+            getTeamLabel={(team) => getTeamLabel(team as TeamKey)}
+            />
+          </div>
         )}
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-800 bg-slate-950/95 backdrop-blur">
         <div className="mx-auto flex max-w-lg justify-center px-2 py-3 sm:max-w-xl">
           <button
             type="button"
             onClick={() => setScreen("home")}
             className={`flex flex-col items-center gap-1 rounded-2xl px-6 py-1 text-xs font-medium transition ${
-              screen === "home" ? "text-blue-600" : "text-slate-500 hover:text-slate-800"
+              screen === "home" ? "text-blue-400" : "text-slate-400 hover:text-white"
             }`}
           >
             <span
               className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${
-                screen === "home" ? "bg-blue-600 text-white" : "bg-slate-100"
+                screen === "home" ? "bg-blue-500 text-white" : "bg-slate-800 text-slate-200"
               }`}
             >
               ⌂
