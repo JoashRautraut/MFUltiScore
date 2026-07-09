@@ -6,6 +6,7 @@ import { PlayerProgressChart } from "@/components/PlayerProgressChart";
 import { fetchCompletedGames, fetchRegisteredUsers, fetchSheetPlayers, saveCompletedGame } from "@/lib/client-api";
 import { STAT_TYPES, StatType } from "@/types/stats";
 import { clearAuthUser, getAuthUser, isAdmin, toRegisteredPlayers, type AuthUser } from "@/lib/auth";
+import { clearLiveGameState, loadLiveGameState, saveLiveGameState } from "@/lib/live-game-storage";
 
 type Screen = "setup" | "live" | "summary" | "dashboard" | "profile";
 
@@ -258,7 +259,33 @@ export default function Home() {
     }
 
     setAuthUserState(user);
-    setScreen(isAdmin(user) ? "setup" : "summary");
+
+    const savedLiveGame = loadLiveGameState(user.username);
+    if (savedLiveGame?.liveGameActive) {
+      setDate(savedLiveGame.date);
+      setGameDurationMinutes(savedLiveGame.gameDurationMinutes);
+      setMatchup(savedLiveGame.matchup);
+      setPlayerAssignments(savedLiveGame.playerAssignments);
+      setPlayerGenders(savedLiveGame.playerGenders);
+
+      const restoredTeamPlayers = createEmptyTeamPlayers();
+      for (const option of TEAM_OPTIONS) {
+        restoredTeamPlayers[option.key] = savedLiveGame.teamPlayers[option.key] ?? [];
+      }
+      setTeamPlayers(restoredTeamPlayers);
+      setLogEntries(savedLiveGame.logEntries);
+      setTimerSeconds(savedLiveGame.timerSeconds);
+      setTimerRunning(savedLiveGame.timerRunning);
+      setLiveGameActive(true);
+      setScreen(
+        savedLiveGame.screen === "live" || savedLiveGame.screen === "summary"
+          ? savedLiveGame.screen
+          : "live",
+      );
+    } else {
+      setScreen(isAdmin(user) ? "setup" : "summary");
+    }
+
     setIsAuthChecking(false);
   }, [router]);
 
@@ -304,7 +331,8 @@ export default function Home() {
 
         setPlayerAssignments((current) => {
           const next: Record<string, TeamKey | null> = {};
-          for (const name of mergedNames) {
+          const allNames = new Set([...mergedNames, ...Object.keys(current)]);
+          for (const name of allNames) {
             next[name] = current[name] ?? null;
           }
           return next;
@@ -348,6 +376,40 @@ export default function Home() {
       cancelled = true;
     };
   }, [isAuthChecking]);
+
+  useEffect(() => {
+    if (isAuthChecking || !authUser || !liveGameActive) {
+      return;
+    }
+
+    saveLiveGameState(authUser.username, {
+      liveGameActive,
+      screen,
+      date,
+      gameDurationMinutes,
+      matchup,
+      playerAssignments,
+      playerGenders,
+      teamPlayers,
+      logEntries,
+      timerSeconds,
+      timerRunning,
+    });
+  }, [
+    isAuthChecking,
+    authUser,
+    liveGameActive,
+    screen,
+    date,
+    gameDurationMinutes,
+    matchup,
+    playerAssignments,
+    playerGenders,
+    teamPlayers,
+    logEntries,
+    timerSeconds,
+    timerRunning,
+  ]);
 
   const userIsAdmin = isAdmin(authUser);
   const navItems = userIsAdmin ? ADMIN_NAV_ITEMS : USER_NAV_ITEMS;
@@ -771,6 +833,9 @@ export default function Home() {
       });
 
       setCompletedGames((current) => [toCompletedGame(savedGame), ...current]);
+      if (authUser) {
+        clearLiveGameState(authUser.username);
+      }
       setLiveGameActive(false);
       setScreen("summary");
     } catch (error) {
