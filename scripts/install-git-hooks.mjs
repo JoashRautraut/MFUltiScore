@@ -6,6 +6,11 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const hookPath = path.join(root, ".githooks", "pre-commit");
 
+if (!existsSync(path.join(root, ".git"))) {
+  console.log("Skipping git hooks install (not a git repository).");
+  process.exit(0);
+}
+
 if (!existsSync(hookPath)) {
   console.error("Missing .githooks/pre-commit");
   process.exit(1);
