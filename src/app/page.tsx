@@ -3,14 +3,33 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PlayerProgressChart } from "@/components/PlayerProgressChart";
+import {
+  DashboardPanelArt,
+  HubPanelCard,
+  LivePanelArt,
+  ProfilePanelArt,
+  SetupPanelArt,
+  SummaryPanelArt,
+} from "@/components/HubPanelCard";
+import { ProfilePhotoAvatar, ProfilePhotoPicker } from "@/components/ProfilePhotoPicker";
 import { fetchCompletedGames, fetchRegisteredUsers, fetchSheetPlayers, saveCompletedGame } from "@/lib/client-api";
 import { STAT_TYPES, StatType } from "@/types/stats";
 import { clearAuthUser, getAuthUser, isAdmin, toRegisteredPlayers, type AuthUser } from "@/lib/auth";
 import { clearLiveGameState, loadLiveGameState, saveLiveGameState } from "@/lib/live-game-storage";
 
-type Screen = "setup" | "live" | "summary" | "dashboard" | "profile";
+type Screen = "home" | "setup" | "live" | "summary" | "dashboard" | "profile";
+
+const SCREEN_TITLES: Record<Screen, string> = {
+  home: "MFULTISCORE",
+  setup: "Setup",
+  live: "Live Game",
+  summary: "Summary",
+  dashboard: "Dashboard",
+  profile: "Profile",
+};
 
 const ADMIN_NAV_ITEMS: Array<[Screen, string]> = [
+  ["home", "Home"],
   ["setup", "Setup"],
   ["live", "Live Game"],
   ["summary", "Summary"],
@@ -19,6 +38,7 @@ const ADMIN_NAV_ITEMS: Array<[Screen, string]> = [
 ];
 
 const USER_NAV_ITEMS: Array<[Screen, string]> = [
+  ["home", "Home"],
   ["summary", "Summary"],
   ["dashboard", "Dashboard"],
   ["profile", "Profile"],
@@ -230,7 +250,7 @@ export default function Home() {
   const router = useRouter();
   const [authUser, setAuthUserState] = useState<AuthUser | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
-  const [screen, setScreen] = useState<Screen>("setup");
+  const [screen, setScreen] = useState<Screen>("home");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [gameDurationMinutes, setGameDurationMinutes] = useState("");
   const [playerSearch, setPlayerSearch] = useState("");
@@ -251,6 +271,7 @@ export default function Home() {
   const [saveGameError, setSaveGameError] = useState("");
   const [liveGameActive, setLiveGameActive] = useState(false);
   const [liveGameEnded, setLiveGameEnded] = useState(false);
+  const [profilePhotoVersion, setProfilePhotoVersion] = useState(0);
 
   const canResumeLiveGame = liveGameActive && !liveGameEnded;
 
@@ -316,7 +337,7 @@ export default function Home() {
           : "live",
       );
     } else {
-      setScreen(isAdmin(user) ? "setup" : "summary");
+      setScreen("home");
     }
 
     setIsAuthChecking(false);
@@ -449,13 +470,65 @@ export default function Home() {
   const userIsAdmin = isAdmin(authUser);
   const navItems = userIsAdmin ? ADMIN_NAV_ITEMS : USER_NAV_ITEMS;
 
+  const hubPanels = useMemo(() => {
+    const panels = [
+      {
+        screen: "setup" as const,
+        title: "Setup",
+        subtitle: "Teams, players & timer",
+        colorClass: "bg-blue-600",
+        artwork: <SetupPanelArt />,
+        adminOnly: true,
+        badge: undefined as string | undefined,
+      },
+      {
+        screen: "live" as const,
+        title: "Live Game",
+        subtitle: "Track stats in real time",
+        colorClass: "bg-rose-500",
+        artwork: <LivePanelArt />,
+        adminOnly: true,
+        badge: canResumeLiveGame ? "In progress" : undefined,
+      },
+      {
+        screen: "summary" as const,
+        title: "Summary",
+        subtitle: "Review & save game results",
+        colorClass: "bg-violet-600",
+        artwork: <SummaryPanelArt />,
+        adminOnly: false,
+        badge: undefined,
+      },
+      {
+        screen: "dashboard" as const,
+        title: "Dashboard",
+        subtitle: "Rankings & game history",
+        colorClass: "bg-amber-500",
+        artwork: <DashboardPanelArt />,
+        adminOnly: false,
+        badge: undefined,
+      },
+      {
+        screen: "profile" as const,
+        title: "Profile",
+        subtitle: "Your stats & photo",
+        colorClass: "bg-slate-900",
+        artwork: <ProfilePanelArt />,
+        adminOnly: false,
+        badge: undefined,
+      },
+    ];
+
+    return panels.filter((panel) => !panel.adminOnly || userIsAdmin);
+  }, [userIsAdmin, canResumeLiveGame]);
+
   useEffect(() => {
     if (isAuthChecking || userIsAdmin) {
       return;
     }
 
     if (screen === "setup" || screen === "live") {
-      setScreen("summary");
+      setScreen("home");
     }
   }, [isAuthChecking, userIsAdmin, screen]);
 
@@ -1075,78 +1148,84 @@ export default function Home() {
 
   if (isAuthChecking) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
+      <main className="flex min-h-screen items-center justify-center bg-white px-4">
         <p className="text-sm text-slate-500">Loading...</p>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 px-4 py-6 text-slate-900 sm:px-6">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="rounded-3xl bg-white px-6 py-6 text-slate-900 shadow-sm border border-slate-200">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-700">
-                Ultimate Frisbee Stat Tracker
+    <main className="min-h-screen bg-white pb-28 text-slate-900">
+      <div className="mx-auto w-full max-w-lg px-4 pt-6 sm:max-w-xl">
+        <header className="mb-6 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            {screen !== "home" && (
+              <button
+                type="button"
+                onClick={() => setScreen("home")}
+                className="mb-2 text-sm font-medium text-slate-500 transition hover:text-slate-800"
+              >
+                ← Back
+              </button>
+            )}
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+              Ultimate Frisbee
+            </p>
+            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
+              {SCREEN_TITLES[screen]}
+            </h1>
+            {screen === "home" && (
+              <p className="mt-2 text-sm text-slate-500">
+                Choose a panel to manage games, stats, and your profile.
               </p>
-              <h1 className="mt-2 text-3xl font-semibold">MFULTISCORE</h1>
-              <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                Clean scorekeeping flow: assign players to up to five teams, track stats live, review the game,
-                and keep saved results on the dashboard.
-              </p>
-            </div>
+            )}
+          </div>
 
-            <div className="flex flex-col gap-3 lg:items-end">
-              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
-                  Signed in as{" "}
-                  <button
-                    type="button"
-                    onClick={() => setScreen("profile")}
-                    className="font-medium text-slate-900 underline-offset-2 hover:underline"
-                  >
-                    {authUser?.playerName}
-                  </button>
-                  <span className="text-slate-400"> · @{authUser?.username}</span>
-                </span>
-                {userIsAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => router.push("/admin")}
-                    className="rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition hover:bg-violet-100"
-                  >
-                    Admin panel
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                  Log out
-                </button>
-              </div>
-
-              <nav className="grid grid-cols-2 gap-2 sm:flex">
-              {navItems.map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setScreen(value as Screen)}
-                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                    screen === value
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-              </nav>
-            </div>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            {authUser && (
+              <button type="button" onClick={() => setScreen("profile")} aria-label="Open profile">
+                <ProfilePhotoAvatar
+                  key={profilePhotoVersion}
+                  username={authUser.username}
+                  playerName={authUser.playerName}
+                  className="h-12 w-12"
+                />
+              </button>
+            )}
+            {userIsAdmin && (
+              <button
+                type="button"
+                onClick={() => router.push("/admin")}
+                className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700"
+              >
+                Admin
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600"
+            >
+              Log out
+            </button>
           </div>
         </header>
+
+        {screen === "home" && (
+          <section className="space-y-4">
+            {hubPanels.map((panel) => (
+              <HubPanelCard
+                key={panel.screen}
+                title={panel.title}
+                subtitle={panel.subtitle}
+                colorClass={panel.colorClass}
+                artwork={panel.artwork}
+                badge={panel.badge}
+                onClick={() => setScreen(panel.screen)}
+              />
+            ))}
+          </section>
+        )}
 
         {userIsAdmin && screen === "setup" && (
           <section className="grid gap-4 xl:grid-cols-[1fr_1.7fr]">
@@ -1673,13 +1752,19 @@ export default function Home() {
 
         {screen === "profile" && personalProgress && authUser && (
           <section className="space-y-4">
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-sm font-medium text-slate-500">Profile</p>
-              <h2 className="mt-1 text-2xl font-semibold text-slate-900">{authUser.playerName}</h2>
-              <p className="mt-2 text-sm text-slate-600">
-                @{authUser.username} · {authUser.gender === "female" ? "Female" : "Male"}
-                {authUser.role === "admin" ? " · Admin" : ""}
-              </p>
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex flex-col items-center text-center">
+                <ProfilePhotoPicker
+                  username={authUser.username}
+                  playerName={authUser.playerName}
+                  onPhotoChange={() => setProfilePhotoVersion((current) => current + 1)}
+                />
+                <h2 className="mt-4 text-2xl font-bold text-slate-900">{authUser.playerName}</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  @{authUser.username} · {authUser.gender === "female" ? "Female" : "Male"}
+                  {authUser.role === "admin" ? " · Admin" : ""}
+                </p>
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1783,6 +1868,38 @@ export default function Home() {
           </section>
         )}
       </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-lg items-center justify-around px-2 py-2 sm:max-w-xl">
+          {navItems.map(([value, label]) => {
+            const isActive = screen === value || (screen === "home" && value === "home");
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setScreen(value)}
+                className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[11px] font-medium transition ${
+                  isActive ? "text-blue-600" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <span
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-base ${
+                    isActive ? "bg-blue-600 text-white" : "bg-slate-100"
+                  }`}
+                >
+                  {value === "home" && "⌂"}
+                  {value === "setup" && "⚙"}
+                  {value === "live" && "▶"}
+                  {value === "summary" && "☰"}
+                  {value === "dashboard" && "📊"}
+                  {value === "profile" && "👤"}
+                </span>
+                <span className="truncate">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
     </main>
   );
 }
