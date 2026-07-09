@@ -237,6 +237,9 @@ export default function Home() {
   const [isSavingGame, setIsSavingGame] = useState(false);
   const [saveGameError, setSaveGameError] = useState("");
   const [liveGameActive, setLiveGameActive] = useState(false);
+  const [liveGameEnded, setLiveGameEnded] = useState(false);
+
+  const canResumeLiveGame = liveGameActive && !liveGameEnded;
 
   const parsedDurationMinutes = useMemo(() => {
     const value = Number(gameDurationMinutes);
@@ -250,6 +253,20 @@ export default function Home() {
     () => (parsedDurationMinutes ?? 0) * 60,
     [parsedDurationMinutes],
   );
+
+  function handleGameDurationMinutesChange(value: string) {
+    setGameDurationMinutes(value);
+
+    if (canResumeLiveGame) {
+      return;
+    }
+
+    const minutes = Number(value);
+    if (Number.isFinite(minutes) && minutes > 0) {
+      setTimerSeconds(Math.floor(minutes * 60));
+      setTimerRunning(false);
+    }
+  }
 
   useEffect(() => {
     const user = getAuthUser();
@@ -276,6 +293,9 @@ export default function Home() {
       setLogEntries(savedLiveGame.logEntries);
       setTimerSeconds(savedLiveGame.timerSeconds);
       setTimerRunning(savedLiveGame.timerRunning);
+      setLiveGameEnded(
+        savedLiveGame.liveGameEnded ?? savedLiveGame.screen === "summary",
+      );
       setLiveGameActive(true);
       setScreen(
         savedLiveGame.screen === "live" || savedLiveGame.screen === "summary"
@@ -384,6 +404,7 @@ export default function Home() {
 
     saveLiveGameState(authUser.username, {
       liveGameActive,
+      liveGameEnded,
       screen,
       date,
       gameDurationMinutes,
@@ -399,6 +420,7 @@ export default function Home() {
     isAuthChecking,
     authUser,
     liveGameActive,
+    liveGameEnded,
     screen,
     date,
     gameDurationMinutes,
@@ -728,6 +750,7 @@ export default function Home() {
     setLogEntries([]);
     setTimerSeconds(configuredDurationSeconds);
     setTimerRunning(true);
+    setLiveGameEnded(false);
     setLiveGameActive(true);
     setScreen("live");
   }
@@ -793,6 +816,7 @@ export default function Home() {
 
   function endGame() {
     setTimerRunning(false);
+    setLiveGameEnded(true);
     setScreen("summary");
   }
 
@@ -837,6 +861,11 @@ export default function Home() {
         clearLiveGameState(authUser.username);
       }
       setLiveGameActive(false);
+      setLiveGameEnded(false);
+      setTimerSeconds(0);
+      setTimerRunning(false);
+      setLogEntries([]);
+      setTeamPlayers(createEmptyTeamPlayers());
       setScreen("summary");
     } catch (error) {
       setSaveGameError(
@@ -1125,7 +1154,7 @@ export default function Home() {
                       inputMode="numeric"
                       placeholder="Enter minutes (e.g. 20)"
                       value={gameDurationMinutes}
-                      onChange={(event) => setGameDurationMinutes(event.target.value)}
+                      onChange={(event) => handleGameDurationMinutesChange(event.target.value)}
                       className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     />
                   </label>
@@ -1217,11 +1246,15 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={() => (liveGameActive ? setScreen("live") : startLiveGame())}
-                disabled={!liveGameActive && (matchup.home === matchup.away || !parsedDurationMinutes)}
+                onClick={() => (canResumeLiveGame ? setScreen("live") : startLiveGame())}
+                disabled={!canResumeLiveGame && (matchup.home === matchup.away || !parsedDurationMinutes)}
                 className="w-full rounded-3xl bg-blue-600 px-5 py-4 text-lg font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                {liveGameActive ? "Back to live game" : "Start live scoring"}
+                {canResumeLiveGame
+                  ? "Back to live game"
+                  : liveGameActive
+                    ? "Start new game"
+                    : "Start live scoring"}
               </button>
             </div>
 
@@ -1229,7 +1262,7 @@ export default function Home() {
               <div className="mb-4">
                 <p className="text-sm font-medium text-slate-500">Player assignment</p>
                 <h2 className="mt-1 text-2xl font-semibold text-slate-900">Choose each player&apos;s team</h2>
-                {liveGameActive && (
+                {canResumeLiveGame && (
                   <p className="mt-2 text-sm text-blue-700">
                     Game in progress — assign a player to {getTeamLabel(matchup.home)} or{" "}
                     {getTeamLabel(matchup.away)} here to add them to the live game.

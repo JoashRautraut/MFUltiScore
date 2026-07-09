@@ -24,6 +24,7 @@ type LogEntry = {
 export type PersistedLiveGameState = {
   version: 1;
   liveGameActive: boolean;
+  liveGameEnded?: boolean;
   screen: Screen;
   date: string;
   gameDurationMinutes: string;
