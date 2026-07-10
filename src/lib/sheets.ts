@@ -10,7 +10,20 @@ const SHEET_NAMES = {
   games: "Games",
   stats: "Stats",
   users: "Users",
+  profileMedia: "ProfileMedia",
 } as const;
+
+const PROFILE_MEDIA_TYPES = ["avatar", "cover", "gallery"] as const;
+export type ProfileMediaType = (typeof PROFILE_MEDIA_TYPES)[number];
+
+export type ProfileMediaRow = {
+  photoId: string;
+  username: string;
+  mediaType: ProfileMediaType;
+  dataUrl: string;
+  caption: string;
+  uploadedAt: string;
+};
 
 const USER_ROLES: UserRole[] = ["user", "admin"];
 const PLAYER_GENDERS: PlayerGender[] = ["male", "female"];
@@ -155,6 +168,45 @@ export async function ensurePlayerRoster(name: string, gender: PlayerGender = "m
   }
 
   return addPlayer(normalizedName, gender);
+}
+
+export async function removePlayerByName(name: string): Promise<void> {
+  const normalizedName = name.trim();
+  if (!normalizedName) {
+    throw new Error("Player name is required.");
+  }
+
+  const players = await getPlayers();
+  const normalizedTarget = normalizedName.toLowerCase();
+  const rowIndex = players.findIndex(
+    (player) => player.name.trim().toLowerCase() === normalizedTarget,
+  );
+
+  if (rowIndex === -1) {
+    return;
+  }
+
+  const sheetId = await getSheetId(SHEET_NAMES.players);
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId,
+              dimension: "ROWS",
+              startIndex: rowIndex + 1,
+              endIndex: rowIndex + 2,
+            },
+          },
+        },
+      ],
+    },
+  });
 }
 
 export async function createGame(input: {
@@ -422,6 +474,202 @@ export async function addUser(input: {
   });
 
   return user;
+}
+
+function toProfileMediaRow(row: string[]): ProfileMediaRow {
+  const [
+    photoId = "",
+    username = "",
+    mediaType = "",
+    dataUrl = "",
+    caption = "",
+    uploadedAt = "",
+  ] = row.map(cleanCell);
+
+  if (!PROFILE_MEDIA_TYPES.includes(mediaType as ProfileMediaType)) {
+    throw new Error(`Invalid profile media type in sheet row: "${mediaType}"`);
+  }
+
+  return {
+    photoId,
+    username,
+    mediaType: mediaType as ProfileMediaType,
+    dataUrl,
+    caption,
+    uploadedAt,
+  };
+}
+
+function normalizeProfileUsername(username: string) {
+  return username.trim().toLowerCase();
+}
+
+export async function getProfileMediaRows(): Promise<ProfileMediaRow[]> {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SHEET_NAMES.profileMedia}!A2:F`,
+  });
+
+  const rows = (response.data.values ?? []) as string[][];
+  return rows.filter((row) => row[0] && row[1] && row[2] && row[3]).map(toProfileMediaRow);
+}
+
+export async function getProfileMediaForUser(username: string): Promise<ProfileMediaRow[]> {
+  const normalizedUsername = normalizeProfileUsername(username);
+  const rows = await getProfileMediaRows();
+  return rows.filter((row) => normalizeProfileUsername(row.username) === normalizedUsername);
+}
+
+async function deleteProfileMediaRowByIndex(rowIndex: number) {
+  const sheetId = await getSheetId(SHEET_NAMES.profileMedia);
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: {
+              sheetId,
+              dimension: "ROWS",
+              startIndex: rowIndex + 1,
+              endIndex: rowIndex + 2,
+            },
+          },
+        },
+      ],
+    },
+  });
+}
+
+async function appendProfileMediaRow(row: ProfileMediaRow) {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SHEET_NAMES.profileMedia}!A:F`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [
+        [
+          row.photoId,
+          row.username,
+          row.mediaType,
+          row.dataUrl,
+          row.caption,
+          row.uploadedAt,
+        ],
+      ],
+    },
+  });
+}
+
+export async function upsertProfileMedia(input: {
+  username: string;
+  mediaType: Extract<ProfileMediaType, "avatar" | "cover">;
+  dataUrl: string;
+}): Promise<ProfileMediaRow> {
+  const username = input.username.trim();
+  if (!username) {
+    throw new Error("Username is required.");
+  }
+
+  if (!input.dataUrl.trim()) {
+    throw new Error("Photo data is required.");
+  }
+
+  const rows = await getProfileMediaRows();
+  const normalizedUsername = normalizeProfileUsername(username);
+  const existingIndex = rows.findIndex(
+    (row) =>
+      normalizeProfileUsername(row.username) === normalizedUsername &&
+      row.mediaType === input.mediaType,
+  );
+
+  const nextRow: ProfileMediaRow = {
+    photoId: existingIndex >= 0 ? rows[existingIndex].photoId : randomUUID(),
+    username,
+    mediaType: input.mediaType,
+    dataUrl: input.dataUrl,
+    caption: "",
+    uploadedAt: new Date().toISOString(),
+  };
+
+  if (existingIndex >= 0) {
+    await deleteProfileMediaRowByIndex(existingIndex);
+  }
+
+  await appendProfileMediaRow(nextRow);
+  return nextRow;
+}
+
+export async function addProfileGalleryPhoto(input: {
+  username: string;
+  dataUrl: string;
+  caption?: string;
+}): Promise<ProfileMediaRow> {
+  const username = input.username.trim();
+  if (!username) {
+    throw new Error("Username is required.");
+  }
+
+  if (!input.dataUrl.trim()) {
+    throw new Error("Photo data is required.");
+  }
+
+  const rows = await getProfileMediaRows();
+  const normalizedUsername = normalizeProfileUsername(username);
+  const galleryCount = rows.filter(
+    (row) =>
+      normalizeProfileUsername(row.username) === normalizedUsername && row.mediaType === "gallery",
+  ).length;
+
+  if (galleryCount >= 12) {
+    throw new Error("You can upload up to 12 photos.");
+  }
+
+  const nextRow: ProfileMediaRow = {
+    photoId: randomUUID(),
+    username,
+    mediaType: "gallery",
+    dataUrl: input.dataUrl,
+    caption: input.caption?.trim() ?? "",
+    uploadedAt: new Date().toISOString(),
+  };
+
+  await appendProfileMediaRow(nextRow);
+  return nextRow;
+}
+
+export async function removeProfileGalleryPhoto(input: {
+  username: string;
+  photoId: string;
+}): Promise<void> {
+  const normalizedUsername = normalizeProfileUsername(input.username);
+  const normalizedPhotoId = input.photoId.trim();
+  if (!normalizedUsername || !normalizedPhotoId) {
+    throw new Error("Username and photo id are required.");
+  }
+
+  const rows = await getProfileMediaRows();
+  const rowIndex = rows.findIndex(
+    (row) =>
+      normalizeProfileUsername(row.username) === normalizedUsername &&
+      row.photoId === normalizedPhotoId &&
+      row.mediaType === "gallery",
+  );
+
+  if (rowIndex === -1) {
+    throw new Error("Photo not found.");
+  }
+
+  await deleteProfileMediaRowByIndex(rowIndex);
 }
 
 export async function removeUserByUsername(username: string): Promise<void> {

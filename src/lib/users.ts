@@ -1,7 +1,13 @@
 import "server-only";
 
 import { AuthUser, PlayerGender, PublicUser, UserRole } from "@/types/auth";
-import { addUser, ensurePlayerRoster, getUsers, removeUserByUsername } from "@/lib/sheets";
+import {
+  addUser,
+  ensurePlayerRoster,
+  getUsers,
+  removePlayerByName,
+  removeUserByUsername,
+} from "@/lib/sheets";
 
 function normalizeUsername(username: string) {
   return username.trim().toLowerCase();
@@ -153,6 +159,6 @@ export async function removeSheetUser(input: {
     throw new Error("Cannot remove the last admin account.");
   }
 
-  await ensurePlayerExists(targetUser.playerName, targetUser.gender);
+  await removePlayerByName(targetUser.playerName);
   await removeUserByUsername(input.targetUsername);
 }

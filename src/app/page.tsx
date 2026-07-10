@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PlayerProgressChart } from "@/components/PlayerProgressChart";
 import { HubPanelCard, PANEL_IMAGE_PATHS } from "@/components/HubPanelCard";
 import { ProfilePhotoAvatar } from "@/components/ProfilePhotoPicker";
-import { ProfileScreen } from "@/components/ProfileScreen";
+import { ProfileScreen, type PersonalProgress, type ProfileSubject } from "@/components/ProfileScreen";
 import { fetchCompletedGames, fetchRegisteredUsers, fetchSheetPlayers, saveCompletedGame } from "@/lib/client-api";
-import { STAT_TYPES, StatType } from "@/types/stats";
+import { STAT_TYPES, StatType, type Player } from "@/types/stats";
 import { clearAuthUser, getAuthUser, isAdmin, toRegisteredPlayers, type AuthUser } from "@/lib/auth";
 import type { PublicUser } from "@/types/auth";
 import { clearLiveGameState, loadLiveGameState, saveLiveGameState } from "@/lib/live-game-storage";
@@ -212,6 +212,70 @@ function getBestPlayer(teamPlayers: Record<TeamKey, ActivePlayer[]>) {
   };
 }
 
+function buildPlayerProgress(
+  playerName: string,
+  gender: PlayerGender,
+  completedGames: CompletedGame[],
+  dashboardPlayers: DashboardPlayer[],
+): PersonalProgress {
+  const normalizedName = playerName.trim().toLowerCase();
+  const gameHistory: PersonalGameRecord[] = [];
+  const statsTotals = emptyCounts();
+  let totalPoints = 0;
+  let mvpWins = 0;
+  let bestMvpPercentage = 0;
+
+  for (const game of completedGames) {
+    for (const player of flattenPlayers(game.teamPlayers)) {
+      if (player.name.trim().toLowerCase() !== normalizedName) {
+        continue;
+      }
+
+      const points = playerPoints(player.counts);
+      totalPoints += points;
+
+      for (const statType of STAT_TYPES) {
+        statsTotals[statType] += player.counts[statType];
+      }
+
+      const wasMvp = game.bestPlayer.name.trim().toLowerCase() === normalizedName;
+      if (wasMvp) {
+        mvpWins += 1;
+        bestMvpPercentage = Math.max(bestMvpPercentage, game.bestPlayer.percentage);
+      }
+
+      gameHistory.push({
+        gameId: game.id,
+        date: game.date,
+        endedAt: game.endedAt,
+        team: player.team,
+        matchupLabel: `${getTeamLabel(game.matchup.home)} vs ${getTeamLabel(game.matchup.away)}`,
+        counts: player.counts,
+        points,
+        wasMvp,
+        mvpPercentage: wasMvp ? game.bestPlayer.percentage : 0,
+      });
+    }
+  }
+
+  const genderRanking = dashboardPlayers.filter((player) => player.gender === gender);
+  const rankIndex = genderRanking.findIndex(
+    (player) => player.name.trim().toLowerCase() === normalizedName,
+  );
+
+  return {
+    gameHistory: [...gameHistory].sort((a, b) => b.date.localeCompare(a.date)),
+    gamesPlayed: gameHistory.length,
+    totalPoints,
+    statsTotals,
+    mvpWins,
+    bestMvpPercentage,
+    genderRank: rankIndex >= 0 ? rankIndex + 1 : null,
+    genderPoolSize: genderRanking.length,
+    totalActions: totalCounts(statsTotals),
+  };
+}
+
 function getRankMedal(rank: number) {
   if (rank === 1) {
     return { emoji: "🥇", rowClass: "bg-amber-500/10 ring-1 ring-amber-500/30", badgeClass: "bg-amber-500/20 text-amber-300" };
@@ -223,6 +287,44 @@ function getRankMedal(rank: number) {
     return { emoji: "🥉", rowClass: "bg-orange-500/10 ring-1 ring-orange-500/30", badgeClass: "bg-orange-500/20 text-orange-300" };
   }
   return null;
+}
+
+function buildActiveRosterNames(
+  sheetPlayers: Player[],
+  registeredPlayers: Array<{ name: string }>,
+): string[] {
+  const names = new Set<string>();
+  for (const player of sheetPlayers) {
+    names.add(player.name);
+  }
+  for (const player of registeredPlayers) {
+    names.add(player.name);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+function resolvePlayerGender(
+  name: string,
+  sheetPlayers: Player[],
+  registeredPlayers: Array<{ name: string; gender: PlayerGender }>,
+  fallback?: PlayerGender,
+): PlayerGender {
+  const normalized = name.trim().toLowerCase();
+  const registered = registeredPlayers.find(
+    (player) => player.name.trim().toLowerCase() === normalized,
+  );
+  if (registered) {
+    return registered.gender;
+  }
+
+  const sheetPlayer = sheetPlayers.find(
+    (player) => player.name.trim().toLowerCase() === normalized,
+  );
+  if (sheetPlayer) {
+    return sheetPlayer.gender;
+  }
+
+  return fallback ?? "male";
 }
 
 export default function Home() {
@@ -253,8 +355,36 @@ export default function Home() {
   const [profilePhotoVersion, setProfilePhotoVersion] = useState(0);
   const [dashboardTab, setDashboardTab] = useState<"male" | "female">("male");
   const [registeredAccounts, setRegisteredAccounts] = useState<PublicUser[]>([]);
+  const [viewingProfile, setViewingProfile] = useState<ProfileSubject | null>(null);
+  const [profileReturnScreen, setProfileReturnScreen] = useState<Screen>("home");
 
   const canResumeLiveGame = liveGameActive && !liveGameEnded;
+
+  const syncRosterFromSources = useCallback(
+    (sheetPlayers: Player[], registeredUsers: PublicUser[]) => {
+      const registeredPlayers = toRegisteredPlayers(registeredUsers);
+      const activeRosterNames = buildActiveRosterNames(sheetPlayers, registeredPlayers);
+
+      setRegisteredAccounts(registeredUsers);
+
+      setPlayerAssignments((current) => {
+        const next: Record<string, TeamKey | null> = {};
+        for (const name of activeRosterNames) {
+          next[name] = current[name] ?? null;
+        }
+        return next;
+      });
+
+      setPlayerGenders((current) => {
+        const next: Record<string, PlayerGender> = {};
+        for (const name of activeRosterNames) {
+          next[name] = resolvePlayerGender(name, sheetPlayers, registeredPlayers, current[name]);
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
   const parsedDurationMinutes = useMemo(() => {
     const value = Number(gameDurationMinutes);
@@ -348,51 +478,7 @@ export default function Home() {
 
         const gamesMapped = games.map(toCompletedGame);
         setCompletedGames(gamesMapped);
-
-        const registeredPlayers = toRegisteredPlayers(registeredUsers);
-        setRegisteredAccounts(registeredUsers);
-        const historicalPlayerNames = new Set<string>();
-
-        for (const game of gamesMapped) {
-          for (const player of flattenPlayers(game.teamPlayers)) {
-            historicalPlayerNames.add(player.name);
-          }
-        }
-
-        const mergedNames = new Set([
-          ...sheetPlayers.map((player) => player.name),
-          ...historicalPlayerNames,
-          ...registeredPlayers.map((player) => player.name),
-        ]);
-
-        setPlayerAssignments((current) => {
-          const next: Record<string, TeamKey | null> = {};
-          const allNames = new Set([...mergedNames, ...Object.keys(current)]);
-          for (const name of allNames) {
-            next[name] = current[name] ?? null;
-          }
-          return next;
-        });
-
-        setPlayerGenders((current) => {
-          const next: Record<string, PlayerGender> = { ...current };
-
-          for (const player of sheetPlayers) {
-            next[player.name] = player.gender;
-          }
-
-          for (const player of registeredPlayers) {
-            next[player.name] = player.gender;
-          }
-
-          for (const name of mergedNames) {
-            if (!next[name]) {
-              next[name] = "male";
-            }
-          }
-
-          return next;
-        });
+        syncRosterFromSources(sheetPlayers, registeredUsers);
       } catch (error) {
         if (!cancelled) {
           setGamesLoadError(
@@ -411,7 +497,46 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthChecking]);
+  }, [isAuthChecking, syncRosterFromSources]);
+
+  useEffect(() => {
+    if (isAuthChecking) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function refreshRoster() {
+      try {
+        const [sheetPlayers, registeredUsers] = await Promise.all([
+          fetchSheetPlayers(),
+          fetchRegisteredUsers(),
+        ]);
+
+        if (!cancelled) {
+          syncRosterFromSources(sheetPlayers, registeredUsers);
+        }
+      } catch {
+        // Keep the current roster if a background refresh fails.
+      }
+    }
+
+    const interval = window.setInterval(() => {
+      void refreshRoster();
+    }, 12000);
+
+    function handleFocus() {
+      void refreshRoster();
+    }
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [isAuthChecking, syncRosterFromSources]);
 
   useEffect(() => {
     if (isAuthChecking || !authUser || !liveGameActive) {
@@ -717,69 +842,69 @@ export default function Home() {
     return playerUsernameByName.get(playerName.trim().toLowerCase()) ?? "";
   }
 
-  const personalProgress = useMemo(() => {
+  function openOwnProfile() {
+    setViewingProfile(null);
+    setProfileReturnScreen(screen);
+    setScreen("profile");
+  }
+
+  function openPlayerProfile(playerName: string) {
+    if (
+      authUser &&
+      authUser.playerName.trim().toLowerCase() === playerName.trim().toLowerCase()
+    ) {
+      openOwnProfile();
+      return;
+    }
+
+    const account = registeredAccounts.find(
+      (user) => user.playerName.trim().toLowerCase() === playerName.trim().toLowerCase(),
+    );
+
+    setProfileReturnScreen(screen);
+    setViewingProfile({
+      username: getUsernameForPlayer(playerName) || playerName,
+      playerName,
+      gender: playerGenders[playerName] ?? account?.gender ?? "male",
+      role: account?.role,
+    });
+    setScreen("profile");
+  }
+
+  function closeProfile() {
+    setViewingProfile(null);
+    setScreen(profileReturnScreen);
+  }
+
+  const activeProfileUser = useMemo((): ProfileSubject | null => {
     if (!authUser) {
       return null;
     }
 
-    const playerName = authUser.playerName;
-    const gameHistory: PersonalGameRecord[] = [];
-    const statsTotals = emptyCounts();
-    let totalPoints = 0;
-    let mvpWins = 0;
-    let bestMvpPercentage = 0;
-
-    for (const game of completedGames) {
-      for (const player of flattenPlayers(game.teamPlayers)) {
-        if (player.name.trim().toLowerCase() !== playerName.trim().toLowerCase()) {
-          continue;
-        }
-
-        const points = playerPoints(player.counts);
-        totalPoints += points;
-
-        for (const statType of STAT_TYPES) {
-          statsTotals[statType] += player.counts[statType];
-        }
-
-        const wasMvp = game.bestPlayer.name === playerName;
-        if (wasMvp) {
-          mvpWins += 1;
-          bestMvpPercentage = Math.max(bestMvpPercentage, game.bestPlayer.percentage);
-        }
-
-        gameHistory.push({
-          gameId: game.id,
-          date: game.date,
-          endedAt: game.endedAt,
-          team: player.team,
-          matchupLabel: `${getTeamLabel(game.matchup.home)} vs ${getTeamLabel(game.matchup.away)}`,
-          counts: player.counts,
-          points,
-          wasMvp,
-          mvpPercentage: wasMvp ? game.bestPlayer.percentage : 0,
-        });
-      }
+    if (viewingProfile) {
+      return viewingProfile;
     }
 
-    const genderRanking =
-      authUser.gender === "female"
-        ? dashboardPlayers.filter((player) => player.gender === "female")
-        : dashboardPlayers.filter((player) => player.gender === "male");
-    const rankIndex = genderRanking.findIndex((player) => player.name === playerName);
-
     return {
-      gameHistory: [...gameHistory].sort((a, b) => b.date.localeCompare(a.date)),
-      gamesPlayed: gameHistory.length,
-      totalPoints,
-      statsTotals,
-      mvpWins,
-      bestMvpPercentage,
-      genderRank: rankIndex >= 0 ? rankIndex + 1 : null,
-      genderPoolSize: genderRanking.length,
-      totalActions: totalCounts(statsTotals),
+      username: authUser.username,
+      playerName: authUser.playerName,
+      gender: authUser.gender,
+      role: authUser.role,
     };
-  }, [authUser, completedGames, dashboardPlayers]);
+  }, [authUser, viewingProfile]);
+
+  const activeProfileProgress = useMemo(() => {
+    if (!activeProfileUser) {
+      return null;
+    }
+
+    return buildPlayerProgress(
+      activeProfileUser.playerName,
+      activeProfileUser.gender,
+      completedGames,
+      dashboardPlayers,
+    );
+  }, [activeProfileUser, completedGames, dashboardPlayers]);
 
   function syncLiveRoster(name: string, team: TeamKey | null) {
     setTeamPlayers((current) => {
@@ -969,7 +1094,13 @@ export default function Home() {
         <div className="flex items-center gap-3">
           {accent && <span className={`h-10 w-1.5 rounded-full ${accent.strong}`} />}
           <div>
-            <p className="font-medium text-white">{player}</p>
+            <button
+              type="button"
+              onClick={() => openPlayerProfile(player)}
+              className="text-left font-medium text-white transition hover:text-blue-300"
+            >
+              {player}
+            </button>
             <p className="text-sm text-slate-300">
               {assignment === null
                 ? "No team assigned"
@@ -1087,8 +1218,10 @@ export default function Home() {
     const username = getUsernameForPlayer(player.name);
 
     return (
-      <div
-        className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${accent.gradient} p-4 shadow-lg ${accent.glow} ring-1 ${accent.ring}`}
+      <button
+        type="button"
+        onClick={() => openPlayerProfile(player.name)}
+        className={`relative w-full overflow-hidden rounded-2xl bg-gradient-to-br ${accent.gradient} p-4 text-left shadow-lg transition hover:brightness-110 ${accent.glow} ring-1 ${accent.ring}`}
       >
         <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-amber-400/10 blur-2xl" />
         <div className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/20 text-lg ring-1 ring-amber-400/40">
@@ -1121,7 +1254,7 @@ export default function Home() {
             )}
           </div>
         </div>
-      </div>
+      </button>
     );
   }
 
@@ -1158,7 +1291,13 @@ export default function Home() {
                 {medal ? medal.emoji : rank}
               </div>
               <div className="min-w-0">
-                <p className="truncate font-medium text-white">{player.name}</p>
+                <button
+                  type="button"
+                  onClick={() => openPlayerProfile(player.name)}
+                  className="truncate text-left font-medium text-white transition hover:text-blue-300"
+                >
+                  {player.name}
+                </button>
                 <p className="text-xs text-slate-400">{player.games} games · {player.bestPlayerWins} MPV</p>
               </div>
               <div className="hidden h-2 rounded-full bg-slate-800 p-0.5 sm:block">
@@ -1215,7 +1354,7 @@ export default function Home() {
 
           <div className="flex shrink-0 flex-col items-end gap-2">
             {authUser && (
-              <button type="button" onClick={() => setScreen("profile")} aria-label="Open profile">
+              <button type="button" onClick={openOwnProfile} aria-label="Open profile">
                 <ProfilePhotoAvatar
                   key={profilePhotoVersion}
                   username={authUser.username}
@@ -1254,7 +1393,13 @@ export default function Home() {
                 colorClass={panel.colorClass}
                 imageSrc={panel.imageSrc}
                 badge={panel.badge}
-                onClick={() => setScreen(panel.screen)}
+                onClick={() => {
+                  if (panel.screen === "profile") {
+                    openOwnProfile();
+                    return;
+                  }
+                  setScreen(panel.screen);
+                }}
               />
             ))}
           </section>
@@ -1808,7 +1953,13 @@ export default function Home() {
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-semibold text-white">{game.bestPlayer.name}</p>
+                          <button
+                            type="button"
+                            onClick={() => openPlayerProfile(game.bestPlayer.name)}
+                            className="font-semibold text-white transition hover:text-amber-300"
+                          >
+                            {game.bestPlayer.name}
+                          </button>
                           <span className="text-xs font-medium text-amber-400">MPV</span>
                         </div>
                       </div>
@@ -1820,14 +1971,15 @@ export default function Home() {
           </section>
         )}
 
-        {screen === "profile" && personalProgress && authUser && (
+        {screen === "profile" && activeProfileUser && activeProfileProgress && (
           <div className="px-4 pt-4">
             <ProfileScreen
-            authUser={authUser}
-            personalProgress={personalProgress}
+            profileUser={activeProfileUser}
+            personalProgress={activeProfileProgress}
             profilePhotoVersion={profilePhotoVersion}
+            readOnly={viewingProfile !== null}
             onPhotoChange={() => setProfilePhotoVersion((current) => current + 1)}
-            onBack={() => setScreen("home")}
+            onBack={closeProfile}
             getTeamLabel={(team) => getTeamLabel(team as TeamKey)}
             />
           </div>

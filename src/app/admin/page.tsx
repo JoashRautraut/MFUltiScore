@@ -62,7 +62,7 @@ export default function AdminPage() {
     }
 
     const confirmed = window.confirm(
-      `Remove login for "${targetUsername}"? Their player profile will stay in the roster for game setup.`,
+      `Remove login for "${targetUsername}"? Their player profile will also be removed from the roster.`,
     );
     if (!confirmed) {
       return;
@@ -128,7 +128,7 @@ export default function AdminPage() {
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold text-slate-900">Registered users</h2>
           <p className="mt-1 text-sm text-slate-500">
-            View all accounts and remove users when needed.
+            View all accounts and remove users when needed. Removing an account also removes their roster profile.
           </p>
 
           {loadError && (

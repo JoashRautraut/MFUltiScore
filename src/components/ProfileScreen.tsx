@@ -4,11 +4,21 @@ import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { PlayerProgressChart } from "@/components/PlayerProgressChart";
 import { PANEL_IMAGE_PATHS } from "@/components/HubPanelCard";
+import { loadCoverPhoto, readCoverPhotoFile, saveCoverPhoto } from "@/lib/profile-cover-photo";
+import {
+  addGalleryPhoto,
+  getGalleryPhotoLimit,
+  loadGalleryPhotos,
+  readGalleryPhotoFile,
+  removeGalleryPhoto,
+  type GalleryPhoto,
+} from "@/lib/profile-gallery";
 import { loadProfilePhoto, readProfilePhotoFile, saveProfilePhoto } from "@/lib/profile-photo";
+import { ProfilePhotoLightbox } from "@/components/ProfilePhotoLightbox";
 import { STAT_TYPES, type StatType } from "@/types/stats";
-import type { AuthUser } from "@/lib/auth";
+import type { PlayerGender } from "@/types/auth";
 
-type ProfileTab = "overview" | "matches" | "stats";
+type ProfileTab = "overview" | "photos" | "matches" | "stats";
 
 type GameHistoryEntry = {
   gameId: string;
@@ -20,6 +30,13 @@ type GameHistoryEntry = {
   points: number;
   wasMvp: boolean;
   mvpPercentage: number;
+};
+
+type ProfileSubject = {
+  username: string;
+  playerName: string;
+  gender: PlayerGender;
+  role?: "user" | "admin";
 };
 
 type PersonalProgress = {
@@ -34,11 +51,14 @@ type PersonalProgress = {
   totalActions: number;
 };
 
+export type { PersonalProgress, ProfileSubject };
+
 type ProfileScreenProps = {
-  authUser: AuthUser;
+  profileUser: ProfileSubject;
   personalProgress: PersonalProgress;
   profilePhotoVersion: number;
-  onPhotoChange: () => void;
+  readOnly?: boolean;
+  onPhotoChange?: () => void;
   onBack: () => void;
   getTeamLabel: (team: string) => string;
 };
@@ -86,18 +106,29 @@ function PerformanceBar({
 }
 
 export function ProfileScreen({
-  authUser,
+  profileUser,
   personalProgress,
   profilePhotoVersion,
+  readOnly = false,
   onPhotoChange,
   onBack,
   getTeamLabel,
 }: ProfileScreenProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState<ProfileTab>("overview");
   const [uploadError, setUploadError] = useState("");
+  const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null);
 
-  const heroPhoto = loadProfilePhoto(authUser.username);
+  const coverPhoto = loadCoverPhoto(profileUser.username);
+  const avatarPhoto = loadProfilePhoto(profileUser.username);
+  const galleryPhotos = useMemo(
+    () => loadGalleryPhotos(profileUser.username),
+    [profileUser.username, profilePhotoVersion],
+  );
+  const galleryLimit = getGalleryPhotoLimit();
+
   const statMax = useMemo(
     () => Math.max(1, ...STAT_TYPES.map((stat) => personalProgress.statsTotals[stat])),
     [personalProgress.statsTotals],
@@ -105,7 +136,28 @@ export function ProfileScreen({
 
   const recentMatches = personalProgress.gameHistory.slice(0, 4);
 
-  async function handlePhotoUpload(event: React.ChangeEvent<HTMLInputElement>) {
+  function notifyMediaChange() {
+    setUploadError("");
+    onPhotoChange?.();
+  }
+
+  async function handleCoverUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    try {
+      const dataUrl = await readCoverPhotoFile(file);
+      saveCoverPhoto(profileUser.username, dataUrl);
+      notifyMediaChange();
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Could not upload cover photo.");
+    }
+  }
+
+  async function handleAvatarUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) {
@@ -114,25 +166,92 @@ export function ProfileScreen({
 
     try {
       const dataUrl = await readProfilePhotoFile(file);
-      saveProfilePhoto(authUser.username, dataUrl);
-      setUploadError("");
-      onPhotoChange();
+      saveProfilePhoto(profileUser.username, dataUrl);
+      notifyMediaChange();
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Could not upload profile photo.");
+    }
+  }
+
+  async function handleGalleryUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    try {
+      const dataUrl = await readGalleryPhotoFile(file);
+      addGalleryPhoto(profileUser.username, dataUrl);
+      notifyMediaChange();
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Could not upload photo.");
     }
   }
 
+  function handleRemoveGalleryPhoto(photoId: string) {
+    removeGalleryPhoto(profileUser.username, photoId);
+    notifyMediaChange();
+  }
+
+  function renderGalleryGrid(photos: GalleryPhoto[]) {
+    if (photos.length === 0) {
+      return (
+        <p className="rounded-2xl bg-slate-900/80 p-4 text-sm text-slate-400">
+          {readOnly
+            ? "No photos uploaded yet."
+            : "Share moments from games and tournaments. Your photos appear here."}
+        </p>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-3 gap-2">
+        {photos.map((photo) => (
+          <div key={photo.id} className="group relative aspect-square overflow-hidden rounded-2xl bg-slate-800">
+            <button
+              type="button"
+              onClick={() => setLightboxPhoto(photo.dataUrl)}
+              className="h-full w-full"
+              aria-label="View photo"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photo.dataUrl} alt="" className="h-full w-full object-cover transition group-hover:brightness-110" />
+            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => handleRemoveGalleryPhoto(photo.id)}
+                className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-sm text-white opacity-0 transition hover:bg-black/80 group-hover:opacity-100"
+                aria-label="Remove photo"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <section className="-mx-4 overflow-hidden rounded-[2rem] bg-slate-950 text-white shadow-2xl sm:mx-0">
       <div className="relative h-56">
-        {heroPhoto ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={profilePhotoVersion}
-            src={heroPhoto}
-            alt={authUser.playerName}
-            className="absolute inset-0 h-full w-full object-cover object-top"
-          />
+        {coverPhoto ? (
+          <button
+            type="button"
+            onClick={() => setLightboxPhoto(coverPhoto)}
+            className="absolute inset-0"
+            aria-label={`View ${profileUser.playerName} cover photo`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              key={`cover-${profilePhotoVersion}`}
+              src={coverPhoto}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          </button>
         ) : (
           <Image
             src={PANEL_IMAGE_PATHS.profile}
@@ -145,7 +264,7 @@ export function ProfileScreen({
         )}
 
         <div
-          className="absolute inset-0"
+          className="pointer-events-none absolute inset-0"
           style={{
             background:
               "linear-gradient(to bottom, rgba(2,6,23,0.15) 0%, rgba(2,6,23,0.55) 55%, rgba(2,6,23,0.95) 100%)",
@@ -156,47 +275,90 @@ export function ProfileScreen({
           type="button"
           onClick={onBack}
           className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/35 text-lg text-white backdrop-blur-sm transition hover:bg-black/50"
-          aria-label="Back to home"
+          aria-label="Back"
         >
           ←
         </button>
 
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="absolute right-4 top-4 rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-400"
-        >
-          Edit photo
-        </button>
+        {readOnly ? (
+          <span className="absolute right-4 top-4 rounded-full bg-black/35 px-3 py-1.5 text-xs font-medium text-slate-200 backdrop-blur-sm">
+            View only
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => coverInputRef.current?.click()}
+            className="absolute bottom-16 right-4 rounded-full bg-black/45 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-black/60"
+          >
+            {coverPhoto ? "Change cover" : "Add cover photo"}
+          </button>
+        )}
 
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          onChange={handlePhotoUpload}
-        />
+        {!readOnly && (
+          <>
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={handleCoverUpload}
+            />
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={handleAvatarUpload}
+            />
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={handleGalleryUpload}
+            />
+          </>
+        )}
 
         <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-800 ring-2 ring-white/30">
-              {heroPhoto ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={`${profilePhotoVersion}-avatar`}
-                  src={heroPhoto}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span className="text-sm font-bold">{getInitials(authUser.playerName)}</span>
+            <div className="relative shrink-0">
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-slate-800 ring-4 ring-slate-950">
+                {avatarPhoto ? (
+                  <button
+                    type="button"
+                    onClick={() => setLightboxPhoto(avatarPhoto)}
+                    className="h-full w-full overflow-hidden rounded-full"
+                    aria-label={`View ${profileUser.playerName} profile photo`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      key={`avatar-${profilePhotoVersion}`}
+                      src={avatarPhoto}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ) : (
+                  <span className="text-lg font-bold">{getInitials(profileUser.playerName)}</span>
+                )}
+              </div>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-blue-500 text-xs text-white shadow-lg transition hover:bg-blue-400"
+                  aria-label="Update profile photo"
+                >
+                  📷
+                </button>
               )}
             </div>
-            <div className="min-w-0">
-              <h2 className="truncate text-2xl font-bold">{authUser.playerName}</h2>
+            <div className="min-w-0 pb-1">
+              <h2 className="truncate text-2xl font-bold">{profileUser.playerName}</h2>
               <p className="text-sm text-slate-300">
-                MFULTISCORE · {authUser.gender === "female" ? "Female" : "Male"}
-                {authUser.role === "admin" ? " · Admin" : ""}
+                MFULTISCORE · {profileUser.gender === "female" ? "Female" : "Male"}
+                {profileUser.role === "admin" ? " · Admin" : ""}
               </p>
             </div>
           </div>
@@ -231,6 +393,7 @@ export function ProfileScreen({
           {(
             [
               ["overview", "Overview"],
+              ["photos", "Photos"],
               ["matches", "Matches"],
               ["stats", "Stats"],
             ] as const
@@ -239,7 +402,7 @@ export function ProfileScreen({
               key={value}
               type="button"
               onClick={() => setTab(value)}
-              className={`flex-1 rounded-full px-3 py-2 text-sm font-medium transition ${
+              className={`flex-1 rounded-full px-2 py-2 text-xs font-medium transition sm:px-3 sm:text-sm ${
                 tab === value ? "bg-white text-slate-900" : "text-slate-300 hover:text-white"
               }`}
             >
@@ -268,10 +431,28 @@ export function ProfileScreen({
             </div>
 
             <div>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-lg font-semibold">Photos</h3>
+                {galleryPhotos.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setTab("photos")}
+                    className="text-sm font-medium text-blue-400 hover:text-blue-300"
+                  >
+                    See all
+                  </button>
+                )}
+              </div>
+              {renderGalleryGrid(galleryPhotos.slice(0, 3))}
+            </div>
+
+            <div>
               <h3 className="mb-3 text-lg font-semibold">Recent matches</h3>
               {recentMatches.length === 0 ? (
                 <p className="rounded-2xl bg-slate-900/80 p-4 text-sm text-slate-400">
-                  No saved games yet. Your match history will appear here.
+                  {readOnly
+                    ? "No saved games yet for this player."
+                    : "No saved games yet. Your match history will appear here."}
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -298,6 +479,31 @@ export function ProfileScreen({
               )}
             </div>
           </>
+        )}
+
+        {tab === "photos" && (
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold">Photos</h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  {readOnly
+                    ? `${galleryPhotos.length} photo${galleryPhotos.length === 1 ? "" : "s"}`
+                    : `${galleryPhotos.length} of ${galleryLimit} photos`}
+                </p>
+              </div>
+              {!readOnly && galleryPhotos.length < galleryLimit && (
+                <button
+                  type="button"
+                  onClick={() => galleryInputRef.current?.click()}
+                  className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-400"
+                >
+                  Add photo
+                </button>
+              )}
+            </div>
+            {renderGalleryGrid(galleryPhotos)}
+          </div>
         )}
 
         {tab === "matches" && (
@@ -376,6 +582,15 @@ export function ProfileScreen({
           </>
         )}
       </div>
+
+      {lightboxPhoto && (
+        <ProfilePhotoLightbox
+          photo={lightboxPhoto}
+          alt={profileUser.playerName}
+          open={Boolean(lightboxPhoto)}
+          onClose={() => setLightboxPhoto(null)}
+        />
+      )}
     </section>
   );
 }
