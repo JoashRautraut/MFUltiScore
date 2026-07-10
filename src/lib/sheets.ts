@@ -476,6 +476,51 @@ export async function addUser(input: {
   return user;
 }
 
+const PROFILE_MEDIA_HEADERS = [
+  "PhotoID",
+  "Username",
+  "MediaType",
+  "DataUrl",
+  "Caption",
+  "UploadedAt",
+] as const;
+
+async function ensureProfileMediaSheet() {
+  const sheets = getSheetsClient();
+  const spreadsheetId = getSpreadsheetId();
+
+  const response = await sheets.spreadsheets.get({ spreadsheetId });
+  const existing = response.data.sheets?.find(
+    (entry) => entry.properties?.title === SHEET_NAMES.profileMedia,
+  );
+
+  if (existing) {
+    return;
+  }
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          addSheet: {
+            properties: { title: SHEET_NAMES.profileMedia },
+          },
+        },
+      ],
+    },
+  });
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${SHEET_NAMES.profileMedia}!A1:F1`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [[...PROFILE_MEDIA_HEADERS]],
+    },
+  });
+}
+
 function toProfileMediaRow(row: string[]): ProfileMediaRow {
   const [
     photoId = "",
@@ -505,6 +550,8 @@ function normalizeProfileUsername(username: string) {
 }
 
 export async function getProfileMediaRows(): Promise<ProfileMediaRow[]> {
+  await ensureProfileMediaSheet();
+
   const sheets = getSheetsClient();
   const spreadsheetId = getSpreadsheetId();
 
@@ -548,6 +595,8 @@ async function deleteProfileMediaRowByIndex(rowIndex: number) {
 }
 
 async function appendProfileMediaRow(row: ProfileMediaRow) {
+  await ensureProfileMediaSheet();
+
   const sheets = getSheetsClient();
   const spreadsheetId = getSpreadsheetId();
 

@@ -17,5 +17,9 @@ export function formatSheetsError(error: unknown): string {
     return "Google Sheets permission denied. Share your spreadsheet with the service account email as Editor.";
   }
 
+  if (message.includes("Sheet tab")) {
+    return "A required Google Sheet tab is missing. Restart the app and try again — profile photo tabs are created automatically.";
+  }
+
   return message;
 }

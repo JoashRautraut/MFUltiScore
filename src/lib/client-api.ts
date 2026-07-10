@@ -1,10 +1,11 @@
 import { AuthUser, PlayerGender, PublicUser, UserRole } from "@/types/auth";
 import { Player } from "@/types/stats";
 import { SaveCompletedGameInput, SerializedCompletedGame } from "@/types/completed-game";
+import type { ProfileMediaBundle, ProfileMediaType } from "@/types/profile-media";
 
 const DEMO_USERS_STORAGE_KEY = "mfultiscore_demo_users";
 
-function isStaticHosting() {
+export function isStaticHosting() {
   if (typeof window === "undefined") {
     return false;
   }
@@ -220,6 +221,57 @@ export async function loginAccount(username: string, password: string): Promise<
   });
   const body = await parseJsonResponse<{ user: AuthUser }>(response);
   return body.user;
+}
+
+export async function fetchProfileMedia(username: string): Promise<ProfileMediaBundle> {
+  if (isStaticHosting()) {
+    return {
+      username,
+      avatar: null,
+      cover: null,
+      gallery: [],
+    };
+  }
+
+  const response = await fetch(`/api/profile-media?username=${encodeURIComponent(username)}`);
+  const body = await parseJsonResponse<{ media: ProfileMediaBundle }>(response);
+  return body.media;
+}
+
+export async function saveProfileMediaPhoto(
+  targetUsername: string,
+  input: {
+    actingUsername: string;
+    mediaType: ProfileMediaType;
+    dataUrl: string;
+    caption?: string;
+  },
+): Promise<ProfileMediaBundle> {
+  const response = await fetch("/api/profile-media", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      targetUsername,
+      ...input,
+    }),
+  });
+  const body = await parseJsonResponse<{ media: ProfileMediaBundle }>(response);
+  return body.media;
+}
+
+export async function deleteProfileMediaPhoto(input: {
+  targetUsername: string;
+  actingUsername: string;
+  photoId: string;
+  mediaType: ProfileMediaType;
+}): Promise<ProfileMediaBundle> {
+  const response = await fetch("/api/profile-media", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = await parseJsonResponse<{ media: ProfileMediaBundle }>(response);
+  return body.media;
 }
 
 export async function removeAccount(input: {

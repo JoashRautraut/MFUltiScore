@@ -6,7 +6,8 @@ import { PlayerProgressChart } from "@/components/PlayerProgressChart";
 import { HubPanelCard, PANEL_IMAGE_PATHS } from "@/components/HubPanelCard";
 import { ProfilePhotoAvatar } from "@/components/ProfilePhotoPicker";
 import { ProfileScreen, type PersonalProgress, type ProfileSubject } from "@/components/ProfileScreen";
-import { fetchCompletedGames, fetchRegisteredUsers, fetchSheetPlayers, saveCompletedGame } from "@/lib/client-api";
+import { fetchCompletedGames, fetchProfileMedia, fetchRegisteredUsers, fetchSheetPlayers, isStaticHosting, saveCompletedGame } from "@/lib/client-api";
+import { cacheProfileMediaBundle } from "@/lib/profile-media-cache";
 import { STAT_TYPES, StatType, type Player } from "@/types/stats";
 import { clearAuthUser, getAuthUser, isAdmin, toRegisteredPlayers, type AuthUser } from "@/lib/auth";
 import type { PublicUser } from "@/types/auth";
@@ -479,6 +480,15 @@ export default function Home() {
         const gamesMapped = games.map(toCompletedGame);
         setCompletedGames(gamesMapped);
         syncRosterFromSources(sheetPlayers, registeredUsers);
+
+        const user = getAuthUser();
+        if (user && !isStaticHosting()) {
+          const bundle = await fetchProfileMedia(user.username);
+          if (!cancelled) {
+            cacheProfileMediaBundle(bundle);
+            setProfilePhotoVersion((current) => current + 1);
+          }
+        }
       } catch (error) {
         if (!cancelled) {
           setGamesLoadError(
@@ -1977,6 +1987,7 @@ export default function Home() {
             profileUser={activeProfileUser}
             personalProgress={activeProfileProgress}
             profilePhotoVersion={profilePhotoVersion}
+            actingUsername={authUser?.username}
             readOnly={viewingProfile !== null}
             onPhotoChange={() => setProfilePhotoVersion((current) => current + 1)}
             onBack={closeProfile}

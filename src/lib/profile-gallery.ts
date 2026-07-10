@@ -41,6 +41,10 @@ function saveGalleryPhotos(username: string, photos: GalleryPhoto[]) {
   localStorage.setItem(storageKey(username), JSON.stringify(photos));
 }
 
+export function replaceGalleryPhotos(username: string, photos: GalleryPhoto[]) {
+  saveGalleryPhotos(username, photos);
+}
+
 export function readGalleryPhotoFile(file: File): Promise<string> {
   if (!file.type.startsWith("image/")) {
     return Promise.reject(new Error("Please choose an image file."));

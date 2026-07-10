@@ -1,18 +1,25 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { PlayerProgressChart } from "@/components/PlayerProgressChart";
 import { PANEL_IMAGE_PATHS } from "@/components/HubPanelCard";
-import { loadCoverPhoto, readCoverPhotoFile, saveCoverPhoto } from "@/lib/profile-cover-photo";
+import {
+  deleteProfileMediaPhoto,
+  fetchProfileMedia,
+  isStaticHosting,
+  saveProfileMediaPhoto,
+} from "@/lib/client-api";
+import { compressImageForUpload } from "@/lib/image-compress";
+import { loadCoverPhoto, saveCoverPhoto } from "@/lib/profile-cover-photo";
 import {
   addGalleryPhoto,
   loadGalleryPhotos,
-  readGalleryPhotoFile,
   removeGalleryPhoto,
   type GalleryPhoto,
 } from "@/lib/profile-gallery";
-import { loadProfilePhoto, readProfilePhotoFile, saveProfilePhoto } from "@/lib/profile-photo";
+import { cacheProfileMediaBundle } from "@/lib/profile-media-cache";
+import { loadProfilePhoto, saveProfilePhoto } from "@/lib/profile-photo";
 import { ProfilePhotoLightbox } from "@/components/ProfilePhotoLightbox";
 import { STAT_TYPES, type StatType } from "@/types/stats";
 import type { PlayerGender } from "@/types/auth";
@@ -56,6 +63,7 @@ type ProfileScreenProps = {
   profileUser: ProfileSubject;
   personalProgress: PersonalProgress;
   profilePhotoVersion: number;
+  actingUsername?: string;
   readOnly?: boolean;
   onPhotoChange?: () => void;
   onBack: () => void;
@@ -108,6 +116,7 @@ export function ProfileScreen({
   profileUser,
   personalProgress,
   profilePhotoVersion,
+  actingUsername,
   readOnly = false,
   onPhotoChange,
   onBack,
@@ -116,8 +125,10 @@ export function ProfileScreen({
   const coverInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const onPhotoChangeRef = useRef(onPhotoChange);
   const [tab, setTab] = useState<ProfileTab>("overview");
   const [uploadError, setUploadError] = useState("");
+  const [isLoadingMedia, setIsLoadingMedia] = useState(false);
   const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null);
 
   const coverPhoto = loadCoverPhoto(profileUser.username);
@@ -133,9 +144,77 @@ export function ProfileScreen({
 
   const recentMatches = personalProgress.gameHistory.slice(0, 4);
 
+  useEffect(() => {
+    onPhotoChangeRef.current = onPhotoChange;
+  }, [onPhotoChange]);
+
+  useEffect(() => {
+    if (isStaticHosting()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadProfileMedia() {
+      setIsLoadingMedia(true);
+      try {
+        const bundle = await fetchProfileMedia(profileUser.username);
+        if (!cancelled) {
+          cacheProfileMediaBundle(bundle);
+          onPhotoChangeRef.current?.();
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setUploadError(
+            error instanceof Error ? error.message : "Could not load profile photos.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingMedia(false);
+        }
+      }
+    }
+
+    void loadProfileMedia();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profileUser.username]);
+
   function notifyMediaChange() {
     setUploadError("");
     onPhotoChange?.();
+  }
+
+  async function persistProfilePhoto(
+    mediaType: "avatar" | "cover" | "gallery",
+    file: File,
+  ) {
+    const dataUrl = await compressImageForUpload(file);
+
+    if (isStaticHosting()) {
+      if (mediaType === "avatar") {
+        saveProfilePhoto(profileUser.username, dataUrl);
+      } else if (mediaType === "cover") {
+        saveCoverPhoto(profileUser.username, dataUrl);
+      } else {
+        addGalleryPhoto(profileUser.username, dataUrl);
+      }
+      return;
+    }
+
+    if (!actingUsername) {
+      throw new Error("Sign in to upload photos.");
+    }
+
+    const bundle = await saveProfileMediaPhoto(profileUser.username, {
+      actingUsername,
+      mediaType,
+      dataUrl,
+    });
+    cacheProfileMediaBundle(bundle);
   }
 
   async function handleCoverUpload(event: React.ChangeEvent<HTMLInputElement>) {
@@ -146,8 +225,7 @@ export function ProfileScreen({
     }
 
     try {
-      const dataUrl = await readCoverPhotoFile(file);
-      saveCoverPhoto(profileUser.username, dataUrl);
+      await persistProfilePhoto("cover", file);
       notifyMediaChange();
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Could not upload cover photo.");
@@ -162,8 +240,7 @@ export function ProfileScreen({
     }
 
     try {
-      const dataUrl = await readProfilePhotoFile(file);
-      saveProfilePhoto(profileUser.username, dataUrl);
+      await persistProfilePhoto("avatar", file);
       notifyMediaChange();
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Could not upload profile photo.");
@@ -178,17 +255,35 @@ export function ProfileScreen({
     }
 
     try {
-      const dataUrl = await readGalleryPhotoFile(file);
-      addGalleryPhoto(profileUser.username, dataUrl);
+      await persistProfilePhoto("gallery", file);
       notifyMediaChange();
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Could not upload photo.");
     }
   }
 
-  function handleRemoveGalleryPhoto(photoId: string) {
-    removeGalleryPhoto(profileUser.username, photoId);
-    notifyMediaChange();
+  async function handleRemoveGalleryPhoto(photoId: string) {
+    try {
+      if (isStaticHosting()) {
+        removeGalleryPhoto(profileUser.username, photoId);
+      } else {
+        if (!actingUsername) {
+          throw new Error("Sign in to manage photos.");
+        }
+
+        const bundle = await deleteProfileMediaPhoto({
+          targetUsername: profileUser.username,
+          actingUsername,
+          photoId,
+          mediaType: "gallery",
+        });
+        cacheProfileMediaBundle(bundle);
+      }
+
+      notifyMediaChange();
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Could not remove photo.");
+    }
   }
 
   function renderGalleryGrid(photos: GalleryPhoto[]) {
@@ -363,6 +458,9 @@ export function ProfileScreen({
       </div>
 
       {uploadError && <p className="px-4 pt-3 text-sm text-red-400">{uploadError}</p>}
+      {isLoadingMedia && !uploadError && (
+        <p className="px-4 pt-3 text-sm text-slate-400">Loading photos…</p>
+      )}
 
       <div className="grid grid-cols-4 gap-2 px-4 py-4">
         <div className="rounded-2xl bg-slate-900/90 p-3 text-center">
