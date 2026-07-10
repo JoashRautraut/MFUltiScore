@@ -623,17 +623,6 @@ export async function addProfileGalleryPhoto(input: {
     throw new Error("Photo data is required.");
   }
 
-  const rows = await getProfileMediaRows();
-  const normalizedUsername = normalizeProfileUsername(username);
-  const galleryCount = rows.filter(
-    (row) =>
-      normalizeProfileUsername(row.username) === normalizedUsername && row.mediaType === "gallery",
-  ).length;
-
-  if (galleryCount >= 12) {
-    throw new Error("You can upload up to 12 photos.");
-  }
-
   const nextRow: ProfileMediaRow = {
     photoId: randomUUID(),
     username,

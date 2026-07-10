@@ -1,5 +1,4 @@
 const STORAGE_PREFIX = "mfultiscore_gallery_photos";
-const MAX_PHOTOS = 12;
 const MAX_BYTES = 1_200_000;
 
 export type GalleryPhoto = {
@@ -67,9 +66,6 @@ export function readGalleryPhotoFile(file: File): Promise<string> {
 
 export function addGalleryPhoto(username: string, dataUrl: string): GalleryPhoto[] {
   const photos = loadGalleryPhotos(username);
-  if (photos.length >= MAX_PHOTOS) {
-    throw new Error(`You can upload up to ${MAX_PHOTOS} photos.`);
-  }
 
   const nextPhoto: GalleryPhoto = {
     id: createPhotoId(),
@@ -86,8 +82,4 @@ export function removeGalleryPhoto(username: string, photoId: string): GalleryPh
   const next = loadGalleryPhotos(username).filter((photo) => photo.id !== photoId);
   saveGalleryPhotos(username, next);
   return next;
-}
-
-export function getGalleryPhotoLimit() {
-  return MAX_PHOTOS;
 }

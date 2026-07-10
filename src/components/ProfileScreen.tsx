@@ -7,7 +7,6 @@ import { PANEL_IMAGE_PATHS } from "@/components/HubPanelCard";
 import { loadCoverPhoto, readCoverPhotoFile, saveCoverPhoto } from "@/lib/profile-cover-photo";
 import {
   addGalleryPhoto,
-  getGalleryPhotoLimit,
   loadGalleryPhotos,
   readGalleryPhotoFile,
   removeGalleryPhoto,
@@ -127,8 +126,6 @@ export function ProfileScreen({
     () => loadGalleryPhotos(profileUser.username),
     [profileUser.username, profilePhotoVersion],
   );
-  const galleryLimit = getGalleryPhotoLimit();
-
   const statMax = useMemo(
     () => Math.max(1, ...STAT_TYPES.map((stat) => personalProgress.statsTotals[stat])),
     [personalProgress.statsTotals],
@@ -487,12 +484,10 @@ export function ProfileScreen({
               <div>
                 <h3 className="text-lg font-semibold">Photos</h3>
                 <p className="mt-1 text-sm text-slate-400">
-                  {readOnly
-                    ? `${galleryPhotos.length} photo${galleryPhotos.length === 1 ? "" : "s"}`
-                    : `${galleryPhotos.length} of ${galleryLimit} photos`}
+                  {galleryPhotos.length} photo{galleryPhotos.length === 1 ? "" : "s"}
                 </p>
               </div>
-              {!readOnly && galleryPhotos.length < galleryLimit && (
+              {!readOnly && (
                 <button
                   type="button"
                   onClick={() => galleryInputRef.current?.click()}
