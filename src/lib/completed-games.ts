@@ -19,7 +19,7 @@ function emptyCounts(): Record<StatType, number> {
 
 function createEmptyTeamPlayers(): Record<string, SerializedCompletedGame["teamPlayers"][string]> {
   return Object.fromEntries(
-    Array.from({ length: 15 }, (_, index) => [`team${index + 1}`, []]),
+    Array.from({ length: 10 }, (_, index) => [`team${index + 1}`, []]),
   );
 }
 

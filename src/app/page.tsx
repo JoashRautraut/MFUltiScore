@@ -35,7 +35,7 @@ type PersonalGameRecord = {
   wasMvp: boolean;
   mvpPercentage: number;
 };
-type TeamIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+type TeamIndex = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 type TeamKey = `team${TeamIndex}`;
 type PlayerGender = "male" | "female";
 
@@ -80,7 +80,7 @@ type CompletedGame = {
   };
 };
 
-const TEAM_OPTIONS = Array.from({ length: 15 }, (_, index) => ({
+const TEAM_OPTIONS = Array.from({ length: 10 }, (_, index) => ({
   key: `team${index + 1}` as TeamKey,
   label: `Team ${index + 1}`,
 }));
