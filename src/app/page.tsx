@@ -1011,6 +1011,8 @@ export default function Home() {
   }
 
   function undoLastPlayerEntry(playerName: string, team: TeamKey) {
+    let entryToUndo: LogEntry | undefined;
+
     setLogEntries((current) => {
       const entryIndex = current.findIndex(
         (entry) => entry.playerName === playerName && entry.team === team,
@@ -1019,23 +1021,28 @@ export default function Home() {
         return current;
       }
 
-      const entry = current[entryIndex];
-      updateTeamPlayers(entry.team, (players) =>
-        players.map((player) =>
-          player.name === entry.playerName
-            ? {
-                ...player,
-                counts: {
-                  ...player.counts,
-                  [entry.statType]: Math.max(player.counts[entry.statType] - 1, 0),
-                },
-              }
-            : player,
-        ),
-      );
-
+      entryToUndo = current[entryIndex];
       return [...current.slice(0, entryIndex), ...current.slice(entryIndex + 1)];
     });
+
+    if (!entryToUndo) {
+      return;
+    }
+
+    const entry = entryToUndo;
+    updateTeamPlayers(entry.team, (players) =>
+      players.map((player) =>
+        player.name === entry.playerName
+          ? {
+              ...player,
+              counts: {
+                ...player.counts,
+                [entry.statType]: Math.max(player.counts[entry.statType] - 1, 0),
+              },
+            }
+          : player,
+      ),
+    );
   }
 
   function canUndoPlayer(playerName: string, team: TeamKey) {
@@ -1111,19 +1118,19 @@ export default function Home() {
     return (
       <div
         key={player}
-        className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 sm:px-3 ${
+        className={`flex flex-col gap-1.5 rounded-xl border px-2.5 py-2 sm:flex-row sm:items-center sm:gap-2 sm:px-3 ${
           accent ? `${accent.ring} ${accent.soft}` : "border-slate-700 bg-slate-900/80"
         }`}
       >
         <button
           type="button"
           onClick={() => openPlayerProfile(player)}
-          className="min-w-0 flex-1 truncate text-left text-sm font-medium text-white transition hover:text-blue-300"
+          className="w-full text-left text-sm font-medium leading-snug text-white transition hover:text-blue-300 sm:min-w-0 sm:flex-1 sm:truncate"
         >
           {player}
         </button>
 
-        <label className="w-[7.5rem] shrink-0 sm:w-32">
+        <label className="w-full shrink-0 sm:w-32">
           <span className="sr-only">Assign team for {player}</span>
           <select
             value={assignment ?? ""}
@@ -1188,13 +1195,13 @@ export default function Home() {
                 key={player.name}
                 className="rounded-xl border border-slate-800 bg-slate-950/80 px-2.5 py-2 sm:px-3"
               >
-                <div className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <h4 className="truncate text-sm font-semibold text-white">{player.name}</h4>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-1">
+                  <div className="min-w-0 sm:flex-1">
+                    <h4 className="text-sm font-semibold leading-snug text-white sm:truncate">{player.name}</h4>
                     <p className="text-xs text-slate-400">{playerPoints(player.counts)} pts</p>
                   </div>
 
-                  <div className="flex shrink-0 gap-1">
+                  <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
                     {STAT_TYPES.map((statType) => (
                       <button
                         key={statType}
@@ -1209,16 +1216,17 @@ export default function Home() {
                         <span className="text-sm font-bold leading-none">{player.counts[statType]}</span>
                       </button>
                     ))}
-                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => undoLastPlayerEntry(player.name, team)}
-                    disabled={!canUndoPlayer(player.name, team)}
-                    className="shrink-0 rounded-lg bg-slate-800 px-2 py-2 text-[11px] font-medium text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-35"
-                  >
-                    Undo
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => undoLastPlayerEntry(player.name, team)}
+                      disabled={!canUndoPlayer(player.name, team)}
+                      aria-label={`Undo last action for ${player.name}`}
+                      className="shrink-0 rounded-lg bg-slate-800 px-1 py-1 text-[10px] font-medium text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-35 sm:px-1.5 sm:py-1.5 sm:text-[11px]"
+                    >
+                      Undo
+                    </button>
+                  </div>
                 </div>
               </article>
             ))
@@ -1608,8 +1616,8 @@ export default function Home() {
                     : "No players in the roster yet."}
                 </div>
               ) : (
-                <div className="grid min-h-0 flex-1 grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-stretch">
-                  <section className="col-start-1 row-start-2 flex min-h-0 flex-col rounded-xl border border-blue-500/25 bg-slate-950/50 p-2.5 sm:p-3 lg:row-start-1">
+                <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-stretch">
+                  <section className="col-span-1 col-start-1 row-start-2 flex min-h-0 flex-col rounded-xl border border-blue-500/25 bg-slate-950/50 p-2.5 sm:p-3 lg:row-start-1">
                     <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
                       <h3 className="text-sm font-semibold text-blue-300">Male</h3>
                       <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-medium text-blue-200 lg:hidden">
@@ -1624,7 +1632,7 @@ export default function Home() {
                     </div>
                   </section>
 
-                  <div className="col-span-2 col-start-1 row-start-1 flex items-stretch justify-center lg:col-span-1 lg:col-start-2 lg:row-start-1">
+                  <div className="col-span-1 col-start-1 row-start-1 flex items-stretch justify-center sm:col-span-2 lg:col-span-1 lg:col-start-2 lg:row-start-1">
                     <div className="flex w-full items-center justify-center gap-4 rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 lg:w-auto lg:flex-col lg:gap-5 lg:border-x lg:border-y-0 lg:bg-transparent lg:px-3 lg:py-8">
                       <div className="text-center">
                         <p className="text-[10px] font-medium uppercase tracking-wide text-blue-300">Male</p>
@@ -1638,7 +1646,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <section className="col-start-2 row-start-2 flex min-h-0 flex-col rounded-xl border border-pink-500/25 bg-slate-950/50 p-2.5 sm:p-3 lg:col-start-3 lg:row-start-1">
+                  <section className="col-span-1 col-start-1 row-start-3 flex min-h-0 flex-col rounded-xl border border-pink-500/25 bg-slate-950/50 p-2.5 sm:col-start-2 sm:row-start-2 lg:col-start-3 lg:row-start-1">
                     <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
                       <h3 className="text-sm font-semibold text-pink-300">Female</h3>
                       <span className="rounded-full bg-pink-500/20 px-2 py-0.5 text-[11px] font-medium text-pink-200 lg:hidden">
@@ -1729,8 +1737,8 @@ export default function Home() {
             <div className="flex min-h-0 flex-col rounded-[1.75rem] border border-slate-800 bg-slate-900/90 p-3 shadow-xl sm:p-4">
               <h2 className="mb-3 shrink-0 text-base font-semibold text-white sm:text-lg">Live scoring</h2>
 
-              <div className="grid min-h-0 flex-1 grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-stretch">
-                <div className="col-start-1 row-start-2 lg:row-start-1">
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-stretch">
+                <div className="col-span-1 col-start-1 row-start-2 lg:row-start-1">
                   {renderLiveTeamPanel(
                     matchupPlayers.home,
                     matchup.home,
@@ -1739,7 +1747,7 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="col-span-2 col-start-1 row-start-1 flex items-stretch justify-center lg:col-span-1 lg:col-start-2 lg:row-start-1">
+                <div className="col-span-1 col-start-1 row-start-1 flex items-stretch justify-center sm:col-span-2 lg:col-span-1 lg:col-start-2 lg:row-start-1">
                   <div className="flex w-full items-center justify-center gap-4 rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 lg:w-auto lg:flex-col lg:gap-5 lg:border-x lg:border-y-0 lg:bg-transparent lg:px-3 lg:py-8">
                     <div className="min-w-0 text-center">
                       <p className={`truncate text-[10px] font-medium uppercase tracking-wide ${getTeamAccent(matchup.home).label}`}>
@@ -1757,7 +1765,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="col-start-2 row-start-2 lg:col-start-3 lg:row-start-1">
+                <div className="col-span-1 col-start-1 row-start-3 sm:col-start-2 sm:row-start-2 lg:col-start-3 lg:row-start-1">
                   {renderLiveTeamPanel(
                     matchupPlayers.away,
                     matchup.away,
