@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PlayerProgressChart } from "@/components/PlayerProgressChart";
 import { HubPanelCard, PANEL_IMAGE_PATHS } from "@/components/HubPanelCard";
@@ -86,7 +86,7 @@ const TEAM_OPTIONS = Array.from({ length: 15 }, (_, index) => ({
 }));
 
 const STAT_ABBR: Record<StatType, string> = {
-  Score: "G",
+  Score: "S",
   Assist: "A",
   Block: "B",
   Callahan: "C",
@@ -351,6 +351,13 @@ export default function Home() {
   const [playerGenders, setPlayerGenders] = useState<Record<string, PlayerGender>>({});
   const [teamPlayers, setTeamPlayers] = useState<Record<TeamKey, ActivePlayer[]>>(createEmptyTeamPlayers());
   const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+  const logEntriesRef = useRef(logEntries);
+  const logEntryIdRef = useRef(0);
+
+  function replaceLogEntries(next: LogEntry[]) {
+    logEntriesRef.current = next;
+    setLogEntries(next);
+  }
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
   const [completedGames, setCompletedGames] = useState<CompletedGame[]>([]);
@@ -443,7 +450,11 @@ export default function Home() {
         restoredTeamPlayers[option.key] = savedLiveGame.teamPlayers[option.key] ?? [];
       }
       setTeamPlayers(restoredTeamPlayers);
-      setLogEntries(savedLiveGame.logEntries);
+      replaceLogEntries(savedLiveGame.logEntries);
+      logEntryIdRef.current = savedLiveGame.logEntries.reduce(
+        (maxId, entry) => Math.max(maxId, entry.id),
+        0,
+      );
       setTimerSeconds(savedLiveGame.timerSeconds);
       setTimerRunning(savedLiveGame.timerRunning);
       setLiveGameEnded(
@@ -968,7 +979,7 @@ export default function Home() {
       nextTeamPlayers[key] = teamSelections[key].map((name) => createPlayer(name, key));
     }
     setTeamPlayers(nextTeamPlayers);
-    setLogEntries([]);
+    replaceLogEntries([]);
     setTimerSeconds(configuredDurationSeconds);
     setTimerRunning(true);
     setLiveGameEnded(false);
@@ -998,40 +1009,32 @@ export default function Home() {
       ),
     );
 
-    setLogEntries((current) => [
-      {
-        id: Date.now(),
-        playerName,
-        team,
-        statType,
-        timestampLabel: formatTime(elapsedSeconds),
-      },
-      ...current,
-    ]);
+    logEntryIdRef.current += 1;
+    const newEntry: LogEntry = {
+      id: logEntryIdRef.current,
+      playerName,
+      team,
+      statType,
+      timestampLabel: formatTime(elapsedSeconds),
+    };
+    replaceLogEntries([newEntry, ...logEntriesRef.current]);
   }
 
   function undoLastPlayerEntry(playerName: string, team: TeamKey) {
-    let entryToUndo: LogEntry | undefined;
-
-    setLogEntries((current) => {
-      const entryIndex = current.findIndex(
-        (entry) => entry.playerName === playerName && entry.team === team,
-      );
-      if (entryIndex === -1) {
-        return current;
-      }
-
-      entryToUndo = current[entryIndex];
-      return [...current.slice(0, entryIndex), ...current.slice(entryIndex + 1)];
-    });
-
-    if (!entryToUndo) {
+    const current = logEntriesRef.current;
+    const entryIndex = current.findIndex(
+      (entry) => entry.playerName === playerName && entry.team === team,
+    );
+    if (entryIndex === -1) {
       return;
     }
 
-    const entry = entryToUndo;
-    updateTeamPlayers(entry.team, (players) =>
-      players.map((player) =>
+    const entry = current[entryIndex];
+    replaceLogEntries([...current.slice(0, entryIndex), ...current.slice(entryIndex + 1)]);
+
+    setTeamPlayers((teamPlayers) => ({
+      ...teamPlayers,
+      [entry.team]: teamPlayers[entry.team].map((player) =>
         player.name === entry.playerName
           ? {
               ...player,
@@ -1042,7 +1045,7 @@ export default function Home() {
             }
           : player,
       ),
-    );
+    }));
   }
 
   function canUndoPlayer(playerName: string, team: TeamKey) {
@@ -1099,7 +1102,7 @@ export default function Home() {
       setLiveGameEnded(false);
       setTimerSeconds(0);
       setTimerRunning(false);
-      setLogEntries([]);
+      replaceLogEntries([]);
       setTeamPlayers(createEmptyTeamPlayers());
       setScreen("summary");
     } catch (error) {
@@ -1173,7 +1176,7 @@ export default function Home() {
           </div>
           {!embedded && (
             <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold text-white ${accent.strong}`}>
-              {goals} G
+              {goals} S
             </span>
           )}
         </div>
@@ -1600,12 +1603,17 @@ export default function Home() {
               <div className="mb-3 shrink-0">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className="text-base font-semibold text-white sm:text-lg">Players</h2>
-                  <input
-                    value={playerSearch}
-                    onChange={(event) => setPlayerSearch(event.target.value)}
-                    placeholder="Search players"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-400 sm:max-w-xs"
-                  />
+                  <div className="flex items-center justify-center gap-4 rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-2 sm:justify-end">
+                    <div className="text-center">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-blue-300">Male</p>
+                      <p className="text-xl font-bold text-white">{filteredMalePlayers.length}</p>
+                    </div>
+                    <div className="h-8 w-px shrink-0 bg-slate-600" />
+                    <div className="text-center">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-pink-300">Female</p>
+                      <p className="text-xl font-bold text-white">{filteredFemalePlayers.length}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1618,11 +1626,8 @@ export default function Home() {
               ) : (
                 <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-stretch">
                   <section className="col-span-1 col-start-1 row-start-2 flex min-h-0 flex-col rounded-xl border border-blue-500/25 bg-slate-950/50 p-2.5 sm:p-3 lg:row-start-1">
-                    <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+                    <div className="mb-2 shrink-0">
                       <h3 className="text-sm font-semibold text-blue-300">Male</h3>
-                      <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-medium text-blue-200 lg:hidden">
-                        {filteredMalePlayers.length}
-                      </span>
                     </div>
                     <div className="min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-[min(50vh,32rem)] sm:max-h-[min(58vh,36rem)] lg:max-h-[min(68vh,44rem)]">
                       {filteredMalePlayers.map((player) => renderSetupPlayerRow(player))}
@@ -1633,25 +1638,19 @@ export default function Home() {
                   </section>
 
                   <div className="col-span-1 col-start-1 row-start-1 flex items-stretch justify-center sm:col-span-2 lg:col-span-1 lg:col-start-2 lg:row-start-1">
-                    <div className="flex w-full items-center justify-center gap-4 rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 lg:w-auto lg:flex-col lg:gap-5 lg:border-x lg:border-y-0 lg:bg-transparent lg:px-3 lg:py-8">
-                      <div className="text-center">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-blue-300">Male</p>
-                        <p className="mt-1 text-2xl font-bold text-white">{filteredMalePlayers.length}</p>
-                      </div>
-                      <div className="h-10 w-px shrink-0 bg-slate-600 lg:h-auto lg:min-h-[4rem] lg:w-px" />
-                      <div className="text-center">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-pink-300">Female</p>
-                        <p className="mt-1 text-2xl font-bold text-white">{filteredFemalePlayers.length}</p>
-                      </div>
+                    <div className="flex w-full items-center lg:w-48 lg:flex-col lg:justify-center lg:px-2">
+                      <input
+                        value={playerSearch}
+                        onChange={(event) => setPlayerSearch(event.target.value)}
+                        placeholder="Search players"
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-400 lg:text-center"
+                      />
                     </div>
                   </div>
 
                   <section className="col-span-1 col-start-1 row-start-3 flex min-h-0 flex-col rounded-xl border border-pink-500/25 bg-slate-950/50 p-2.5 sm:col-start-2 sm:row-start-2 lg:col-start-3 lg:row-start-1">
-                    <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+                    <div className="mb-2 shrink-0">
                       <h3 className="text-sm font-semibold text-pink-300">Female</h3>
-                      <span className="rounded-full bg-pink-500/20 px-2 py-0.5 text-[11px] font-medium text-pink-200 lg:hidden">
-                        {filteredFemalePlayers.length}
-                      </span>
                     </div>
                     <div className="min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-[min(50vh,32rem)] sm:max-h-[min(58vh,36rem)] lg:max-h-[min(68vh,44rem)]">
                       {filteredFemalePlayers.map((player) => renderSetupPlayerRow(player))}
@@ -1684,7 +1683,7 @@ export default function Home() {
                     <p className="mt-1 text-3xl font-bold tabular-nums text-white">{matchupScore.away}</p>
                   </div>
                 </div>
-                <p className="mt-1 text-center text-[11px] uppercase tracking-wide text-slate-500">Goals</p>
+                <p className="mt-1 text-center text-[11px] uppercase tracking-wide text-slate-500">Scores</p>
 
                 <div className="mt-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-center">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Time left</p>
@@ -1714,24 +1713,6 @@ export default function Home() {
                   <p className="text-xs text-slate-400">{bestPlayerToday.percentage}%</p>
                 </div>
               </div>
-
-              <section className="rounded-[1.75rem] border border-slate-800 bg-slate-900/90 p-3 shadow-xl sm:p-4">
-                <h3 className="text-sm font-semibold text-white">Recent activity</h3>
-                <div className="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
-                  {logEntries.length === 0 ? (
-                    <p className="text-xs text-slate-400">No actions yet.</p>
-                  ) : (
-                    logEntries.slice(0, 8).map((entry) => (
-                      <div key={entry.id} className="rounded-lg bg-slate-950 px-2.5 py-2">
-                        <p className="truncate text-sm font-medium text-white">{entry.playerName}</p>
-                        <p className="text-xs text-slate-400">
-                          {STAT_ABBR[entry.statType]} · {entry.timestampLabel}
-                        </p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
             </div>
 
             <div className="flex min-h-0 flex-col rounded-[1.75rem] border border-slate-800 bg-slate-900/90 p-3 shadow-xl sm:p-4">
@@ -1774,6 +1755,27 @@ export default function Home() {
                   )}
                 </div>
               </div>
+
+              <section className="mt-3 shrink-0 rounded-xl border border-slate-800 bg-slate-950/80 p-3">
+                <h3 className="text-sm font-semibold text-white">Recent activity</h3>
+                <div className="mt-2 max-h-28 space-y-1 overflow-y-auto">
+                  {logEntries.length === 0 ? (
+                    <p className="text-xs text-slate-400">No actions yet.</p>
+                  ) : (
+                    logEntries.slice(0, 8).map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex min-w-0 items-baseline justify-between gap-2 rounded-lg bg-slate-950 px-2 py-1.5"
+                      >
+                        <p className="min-w-0 truncate text-xs font-medium text-white">{entry.playerName}</p>
+                        <p className="shrink-0 text-[11px] text-slate-400">
+                          {STAT_ABBR[entry.statType]} · {entry.timestampLabel}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
             </div>
           </section>
         )}
@@ -1819,7 +1821,7 @@ export default function Home() {
                           <div className="text-right">
                             <p className="font-semibold text-white">{playerPoints(player.counts)} pts</p>
                             <p className="text-xs text-slate-400">
-                              {player.counts.Score}G · {player.counts.Assist}A · {player.counts.Block}B
+                              {player.counts.Score}S · {player.counts.Assist}A · {player.counts.Block}B
                               {player.counts.Callahan > 0 ? ` · ${player.counts.Callahan}C` : ""}
                             </p>
                           </div>
