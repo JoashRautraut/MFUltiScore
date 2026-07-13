@@ -85,6 +85,13 @@ const TEAM_OPTIONS = Array.from({ length: 15 }, (_, index) => ({
   label: `Team ${index + 1}`,
 }));
 
+const STAT_ABBR: Record<StatType, string> = {
+  Score: "G",
+  Assist: "A",
+  Block: "B",
+  Callahan: "C",
+};
+
 function toCompletedGame(game: Awaited<ReturnType<typeof fetchCompletedGames>>[number]): CompletedGame {
   const teamPlayers = createEmptyTeamPlayers();
   for (const option of TEAM_OPTIONS) {
@@ -1003,29 +1010,36 @@ export default function Home() {
     ]);
   }
 
-  function undoLastEntry() {
+  function undoLastPlayerEntry(playerName: string, team: TeamKey) {
     setLogEntries((current) => {
-      const [lastEntry, ...remaining] = current;
-      if (!lastEntry) {
+      const entryIndex = current.findIndex(
+        (entry) => entry.playerName === playerName && entry.team === team,
+      );
+      if (entryIndex === -1) {
         return current;
       }
 
-      updateTeamPlayers(lastEntry.team, (players) =>
+      const entry = current[entryIndex];
+      updateTeamPlayers(entry.team, (players) =>
         players.map((player) =>
-          player.name === lastEntry.playerName
+          player.name === entry.playerName
             ? {
                 ...player,
                 counts: {
                   ...player.counts,
-                  [lastEntry.statType]: Math.max(player.counts[lastEntry.statType] - 1, 0),
+                  [entry.statType]: Math.max(player.counts[entry.statType] - 1, 0),
                 },
               }
             : player,
         ),
       );
 
-      return remaining;
+      return [...current.slice(0, entryIndex), ...current.slice(entryIndex + 1)];
     });
+  }
+
+  function canUndoPlayer(playerName: string, team: TeamKey) {
+    return logEntries.some((entry) => entry.playerName === playerName && entry.team === team);
   }
 
   function endGame() {
@@ -1097,36 +1111,19 @@ export default function Home() {
     return (
       <div
         key={player}
-        className={`flex flex-col gap-3 rounded-2xl border p-4 md:flex-row md:items-center md:justify-between ${
-          accent ? `border-2 ${accent.ring} ${accent.soft}` : "border-slate-700 bg-slate-900"
+        className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 sm:px-3 ${
+          accent ? `${accent.ring} ${accent.soft}` : "border-slate-700 bg-slate-900/80"
         }`}
       >
-        <div className="flex items-center gap-3">
-          {accent && <span className={`h-10 w-1.5 rounded-full ${accent.strong}`} />}
-          <div>
-            <button
-              type="button"
-              onClick={() => openPlayerProfile(player)}
-              className="text-left font-medium text-white transition hover:text-blue-300"
-            >
-              {player}
-            </button>
-            <p className="text-sm text-slate-300">
-              {assignment === null
-                ? "No team assigned"
-                : `Assigned to ${getTeamLabel(assignment)}`}
-            </p>
-            {accent && assignment && (
-              <span
-                className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${accent.badge}`}
-              >
-                {getTeamLabel(assignment)}
-              </span>
-            )}
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => openPlayerProfile(player)}
+          className="min-w-0 flex-1 truncate text-left text-sm font-medium text-white transition hover:text-blue-300"
+        >
+          {player}
+        </button>
 
-        <label className="w-full md:w-44">
+        <label className="w-[7.5rem] shrink-0 sm:w-32">
           <span className="sr-only">Assign team for {player}</span>
           <select
             value={assignment ?? ""}
@@ -1134,7 +1131,7 @@ export default function Home() {
               const value = event.target.value;
               assignPlayer(player, value === "" ? null : (value as TeamKey));
             }}
-            className={`w-full rounded-xl border bg-slate-950 px-3 py-2 text-sm font-medium text-white outline-none focus:border-blue-400 ${
+            className={`w-full rounded-lg border bg-slate-950 px-2 py-1.5 text-xs font-medium text-white outline-none focus:border-blue-400 sm:text-sm ${
               accent ? accent.ring : "border-slate-700"
             }`}
           >
@@ -1150,53 +1147,97 @@ export default function Home() {
     );
   }
 
-  function renderPlayerCards(players: ActivePlayer[], team: TeamKey, label: string) {
+  function renderLiveTeamPanel(
+    players: ActivePlayer[],
+    team: TeamKey,
+    label: string,
+    options?: { embedded?: boolean },
+  ) {
     const accent = getTeamAccent(team);
-    return (
-      <section className={`space-y-3 rounded-3xl border p-4 shadow-sm ${accent.ring} ${accent.soft}`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className={`text-lg font-semibold ${accent.label}`}>{label}</h3>
-            <p className="text-sm text-slate-400">{players.length} active players</p>
+    const embedded = options?.embedded ?? false;
+    const goals = matchupScore[team === matchup.home ? "home" : "away"];
+
+    const content = (
+      <>
+        <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className={`truncate text-sm font-semibold sm:text-base ${accent.label}`}>{label}</h3>
+            <p className="text-xs text-slate-400">{players.length} players</p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-sm font-medium text-white ${accent.strong}`}>
-            {label}
-          </span>
+          {!embedded && (
+            <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold text-white ${accent.strong}`}>
+              {goals} G
+            </span>
+          )}
         </div>
 
-        {players.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-600 bg-slate-950/40 p-4 text-sm text-slate-400">
-            No players assigned.
-          </div>
-        ) : (
-          players.map((player) => (
-            <article key={player.name} className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div>
-                  <h4 className="text-lg font-semibold text-white">{player.name}</h4>
-                  <p className="text-sm text-slate-400">Total actions: {totalCounts(player.counts)}</p>
-                </div>
-                <span className="rounded-full bg-slate-800 px-3 py-1 text-sm font-medium text-slate-200">
-                  {playerPoints(player.counts)} pts
-                </span>
-              </div>
+        <div
+          className={`min-h-0 space-y-1.5 overflow-y-auto pr-1 ${
+            embedded
+              ? "max-h-[min(50vh,32rem)] sm:max-h-[min(58vh,36rem)] lg:max-h-[min(68vh,44rem)]"
+              : "max-h-[min(62vh,42rem)] lg:max-h-[min(70vh,48rem)]"
+          }`}
+        >
+          {players.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-600 bg-slate-950/40 p-3 text-sm text-slate-400">
+              No players assigned.
+            </div>
+          ) : (
+            players.map((player) => (
+              <article
+                key={player.name}
+                className="rounded-xl border border-slate-800 bg-slate-950/80 px-2.5 py-2 sm:px-3"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="truncate text-sm font-semibold text-white">{player.name}</h4>
+                    <p className="text-xs text-slate-400">{playerPoints(player.counts)} pts</p>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {STAT_TYPES.map((statType) => (
+                  <div className="flex shrink-0 gap-1">
+                    {STAT_TYPES.map((statType) => (
+                      <button
+                        key={statType}
+                        type="button"
+                        onClick={() => addStat(player.name, team, statType)}
+                        title={statType}
+                        className={`flex h-9 w-9 flex-col items-center justify-center rounded-lg text-white transition hover:opacity-90 sm:h-10 sm:w-10 ${accent.strong}`}
+                      >
+                        <span className="text-[9px] font-medium uppercase leading-none opacity-80">
+                          {STAT_ABBR[statType]}
+                        </span>
+                        <span className="text-sm font-bold leading-none">{player.counts[statType]}</span>
+                      </button>
+                    ))}
+                  </div>
+
                   <button
-                    key={statType}
                     type="button"
-                    onClick={() => addStat(player.name, team, statType)}
-                    className={`rounded-2xl px-4 py-4 text-left text-white transition hover:opacity-90 ${accent.strong}`}
+                    onClick={() => undoLastPlayerEntry(player.name, team)}
+                    disabled={!canUndoPlayer(player.name, team)}
+                    className="shrink-0 rounded-lg bg-slate-800 px-2 py-2 text-[11px] font-medium text-slate-200 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-35"
                   >
-                    <span className="block text-sm text-slate-300">{statType}</span>
-                    <span className="mt-1 block text-2xl font-semibold">{player.counts[statType]}</span>
+                    Undo
                   </button>
-                ))}
-              </div>
-            </article>
-          ))
-        )}
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </>
+    );
+
+    if (embedded) {
+      return (
+        <section className={`flex min-h-0 flex-col rounded-xl border p-2.5 sm:p-3 ${accent.ring} ${accent.soft}`}>
+          {content}
+        </section>
+      );
+    }
+
+    return (
+      <section className={`flex min-h-0 flex-col rounded-[1.75rem] border p-3 shadow-sm sm:p-4 ${accent.ring} ${accent.soft}`}>
+        {content}
       </section>
     );
   }
@@ -1334,9 +1375,19 @@ export default function Home() {
     );
   }
 
+  const isWideGameScreen = screen === "setup" || screen === "live";
+
   return (
     <main className="min-h-screen bg-slate-950 pb-28 text-white">
-      <div className={`mx-auto w-full max-w-lg sm:max-w-xl ${screen === "profile" ? "px-0 pt-0" : "px-4 pt-6"}`}>
+      <div
+        className={`mx-auto w-full pt-6 ${
+          screen === "profile"
+            ? "px-0 pt-0"
+            : isWideGameScreen
+              ? "max-w-7xl px-4 sm:px-6 lg:px-8"
+              : "max-w-lg px-4 sm:max-w-xl"
+        }`}
+      >
         {screen !== "profile" && (
         <header className="mb-6 flex items-start justify-between gap-4 rounded-[2rem] border border-slate-800 bg-slate-900/90 px-5 py-5 shadow-xl">
           <div className="min-w-0">
@@ -1416,55 +1467,41 @@ export default function Home() {
         )}
 
         {userIsAdmin && screen === "setup" && (
-          <section className="grid gap-4 xl:grid-cols-[1fr_1.7fr]">
-            <div className="space-y-4">
-              <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-                <p className="text-sm font-medium text-slate-400">Step 1</p>
-                <h2 className="mt-1 text-2xl font-semibold text-white">Prepare the game</h2>
-                <p className="mt-2 text-sm text-slate-300">
-                  Registered players are added to the roster automatically. Assign each player to a team, or leave them unassigned.
-                </p>
-              </div>
-
-              <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-300">Game date</span>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(event) => setDate(event.target.value)}
-                    className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-400"
-                  />
-                </label>
-
-                <div className="mt-4">
+          <section className="grid gap-3 lg:grid-cols-[minmax(0,18rem)_1fr] xl:grid-cols-[minmax(0,20rem)_1fr]">
+            <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
+              <div className="rounded-[1.75rem] border border-slate-800 bg-slate-900/90 p-3 shadow-xl sm:p-4">
+                <div className="grid grid-cols-2 gap-2">
                   <label className="block">
-                    <span className="text-sm font-medium text-slate-300">Match timer (minutes)</span>
+                    <span className="text-xs font-medium text-slate-400">Date</span>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(event) => setDate(event.target.value)}
+                      className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm text-white outline-none focus:border-blue-400"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-xs font-medium text-slate-400">Minutes</span>
                     <input
                       type="number"
                       min={1}
                       step={1}
                       inputMode="numeric"
-                      placeholder="Enter minutes (e.g. 20)"
+                      placeholder="20"
                       value={gameDurationMinutes}
                       onChange={(event) => handleGameDurationMinutesChange(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-400"
+                      className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm text-white outline-none focus:border-blue-400"
                     />
                   </label>
-                  {!parsedDurationMinutes && gameDurationMinutes.trim() !== "" && (
-                    <p className="mt-2 text-sm text-red-600">Enter a valid number of minutes greater than 0.</p>
-                  )}
-                  {!gameDurationMinutes.trim() && (
-                    <p className="mt-2 text-sm text-slate-400">Set how long the countdown should run before you start.</p>
-                  )}
                 </div>
-              </div>
+                {!parsedDurationMinutes && gameDurationMinutes.trim() !== "" && (
+                  <p className="mt-1.5 text-xs text-red-500">Enter valid minutes.</p>
+                )}
 
-              <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-                <p className="text-sm font-medium text-slate-300">Who is playing?</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-end">
-                  <label className="block">
-                    <span className="text-sm text-slate-400">Team</span>
+                <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                  <label className="block min-w-0">
+                    <span className="text-xs text-slate-500">Home</span>
                     <select
                       value={matchup.home}
                       onChange={(event) => {
@@ -1474,7 +1511,7 @@ export default function Home() {
                           away: current.away === nextHome ? getDifferentTeam(nextHome) : current.away,
                         }));
                       }}
-                      className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-400"
+                      className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-white outline-none focus:border-blue-400"
                     >
                       {TEAM_OPTIONS.map((option) => (
                         <option key={option.key} value={option.key}>
@@ -1484,12 +1521,10 @@ export default function Home() {
                     </select>
                   </label>
 
-                  <div className="pb-3 text-center text-sm font-semibold uppercase tracking-wide text-slate-500">
-                    vs
-                  </div>
+                  <span className="pb-2 text-xs font-semibold text-slate-500">vs</span>
 
-                  <label className="block">
-                    <span className="text-sm text-slate-400">Team</span>
+                  <label className="block min-w-0">
+                    <span className="text-xs text-slate-500">Away</span>
                     <select
                       value={matchup.away}
                       onChange={(event) => {
@@ -1499,7 +1534,7 @@ export default function Home() {
                           away: nextAway,
                         }));
                       }}
-                      className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-400"
+                      className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-2 text-sm text-white outline-none focus:border-blue-400"
                     >
                       {TEAM_OPTIONS.map((option) => (
                         <option key={option.key} value={option.key}>
@@ -1510,38 +1545,33 @@ export default function Home() {
                   </label>
                 </div>
                 {matchup.home === matchup.away && (
-                  <p className="mt-3 text-sm text-amber-700">
-                    Choose two different teams for the matchup.
-                  </p>
+                  <p className="mt-2 text-xs text-amber-500">Pick two different teams.</p>
+                )}
+
+                {TEAM_OPTIONS.some((option) => teamSelections[option.key].length > 0) && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {TEAM_OPTIONS.filter((option) => teamSelections[option.key].length > 0).map(
+                      (option) => {
+                        const accent = getTeamAccent(option.key);
+                        return (
+                          <span
+                            key={option.key}
+                            className={`rounded-lg px-2 py-1 text-xs font-medium ${accent.badge}`}
+                          >
+                            {option.label} {teamSelections[option.key].length}
+                          </span>
+                        );
+                      },
+                    )}
+                  </div>
                 )}
               </div>
-
-              {TEAM_OPTIONS.some((option) => teamSelections[option.key].length > 0) && (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {TEAM_OPTIONS.filter((option) => teamSelections[option.key].length > 0).map(
-                    (option) => {
-                      const accent = getTeamAccent(option.key);
-                      return (
-                        <div
-                          key={option.key}
-                          className={`rounded-3xl border p-4 shadow-sm ${accent.ring} ${accent.soft}`}
-                        >
-                          <p className={`text-sm font-medium ${accent.label}`}>{option.label}</p>
-                          <p className="mt-2 text-3xl font-semibold text-white">
-                            {teamSelections[option.key].length}
-                          </p>
-                        </div>
-                      );
-                    },
-                  )}
-                </div>
-              )}
 
               <button
                 type="button"
                 onClick={() => (canResumeLiveGame ? setScreen("live") : startLiveGame())}
                 disabled={!canResumeLiveGame && (matchup.home === matchup.away || !parsedDurationMinutes)}
-                className="w-full rounded-3xl bg-blue-500 px-5 py-4 text-lg font-semibold text-white shadow-lg disabled:cursor-not-allowed disabled:bg-slate-700"
+                className="w-full rounded-2xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white shadow-lg disabled:cursor-not-allowed disabled:bg-slate-700 sm:text-base"
               >
                 {canResumeLiveGame
                   ? "Back to live game"
@@ -1549,169 +1579,193 @@ export default function Home() {
                     ? "Start new game"
                     : "Start live scoring"}
               </button>
+
+              {canResumeLiveGame && (
+                <p className="rounded-xl bg-blue-500/10 px-3 py-2 text-xs text-blue-300">
+                  Game in progress — assign players to {getTeamLabel(matchup.home)} or{" "}
+                  {getTeamLabel(matchup.away)} to add them live.
+                </p>
+              )}
             </div>
 
-            <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-              <div className="mb-4">
-                <p className="text-sm font-medium text-slate-400">Player assignment</p>
-                <h2 className="mt-1 text-2xl font-semibold text-white">Choose each player&apos;s team</h2>
-                {canResumeLiveGame && (
-                  <p className="mt-2 text-sm text-blue-300">
-                    Game in progress — assign a player to {getTeamLabel(matchup.home)} or{" "}
-                    {getTeamLabel(matchup.away)} here to add them to the live game.
-                  </p>
-                )}
-              </div>
-
-              <div className="mb-4">
-                <label className="block">
-                  <span className="text-sm font-medium text-slate-300">Search players</span>
+            <div className="flex min-h-0 flex-col rounded-[1.75rem] border border-slate-800 bg-slate-900/90 p-3 shadow-xl sm:p-4">
+              <div className="mb-3 shrink-0">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-base font-semibold text-white sm:text-lg">Players</h2>
                   <input
                     value={playerSearch}
                     onChange={(event) => setPlayerSearch(event.target.value)}
-                    placeholder="Search by player name"
-                    className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-400"
+                    placeholder="Search players"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-blue-400 sm:max-w-xs"
                   />
-                </label>
+                </div>
               </div>
 
-              <div className="space-y-6">
-                {filteredSetupPlayers.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-600 bg-slate-950/40 p-4 text-sm text-slate-400">
-                    {playerSearch.trim()
-                      ? "No players match your search."
-                      : "No players in the roster yet. Register an account or add players to the Players sheet."}
+              {filteredSetupPlayers.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-600 bg-slate-950/40 p-3 text-sm text-slate-400">
+                  {playerSearch.trim()
+                    ? "No players match your search."
+                    : "No players in the roster yet."}
+                </div>
+              ) : (
+                <div className="grid min-h-0 flex-1 grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-stretch">
+                  <section className="col-start-1 row-start-2 flex min-h-0 flex-col rounded-xl border border-blue-500/25 bg-slate-950/50 p-2.5 sm:p-3 lg:row-start-1">
+                    <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-blue-300">Male</h3>
+                      <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[11px] font-medium text-blue-200 lg:hidden">
+                        {filteredMalePlayers.length}
+                      </span>
+                    </div>
+                    <div className="min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-[min(50vh,32rem)] sm:max-h-[min(58vh,36rem)] lg:max-h-[min(68vh,44rem)]">
+                      {filteredMalePlayers.map((player) => renderSetupPlayerRow(player))}
+                      {filteredMalePlayers.length === 0 && (
+                        <p className="text-xs text-slate-500">No male players match.</p>
+                      )}
+                    </div>
+                  </section>
+
+                  <div className="col-span-2 col-start-1 row-start-1 flex items-stretch justify-center lg:col-span-1 lg:col-start-2 lg:row-start-1">
+                    <div className="flex w-full items-center justify-center gap-4 rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 lg:w-auto lg:flex-col lg:gap-5 lg:border-x lg:border-y-0 lg:bg-transparent lg:px-3 lg:py-8">
+                      <div className="text-center">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-blue-300">Male</p>
+                        <p className="mt-1 text-2xl font-bold text-white">{filteredMalePlayers.length}</p>
+                      </div>
+                      <div className="h-10 w-px shrink-0 bg-slate-600 lg:h-auto lg:min-h-[4rem] lg:w-px" />
+                      <div className="text-center">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-pink-300">Female</p>
+                        <p className="mt-1 text-2xl font-bold text-white">{filteredFemalePlayers.length}</p>
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  <>
-                    <section className="rounded-2xl border border-blue-500/30 bg-slate-900/80 p-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-blue-300">Male players</h3>
-                        <span className="rounded-full bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-200">
-                          {filteredMalePlayers.length}
-                        </span>
-                      </div>
-                      <div className="grid gap-3">
-                        {filteredMalePlayers.map((player) => renderSetupPlayerRow(player))}
-                        {filteredMalePlayers.length === 0 && (
-                          <div className="rounded-2xl border border-dashed border-blue-500/30 bg-slate-950/40 p-4 text-sm text-slate-400">
-                            No male players match your search.
-                          </div>
-                        )}
-                      </div>
-                    </section>
 
-                    <section className="rounded-2xl border border-pink-500/30 bg-slate-900/80 p-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-pink-300">Female players</h3>
-                        <span className="rounded-full bg-pink-500/20 px-3 py-1 text-xs font-medium text-pink-200">
-                          {filteredFemalePlayers.length}
-                        </span>
-                      </div>
-                      <div className="grid gap-3">
-                        {filteredFemalePlayers.map((player) => renderSetupPlayerRow(player))}
-                        {filteredFemalePlayers.length === 0 && (
-                          <div className="rounded-2xl border border-dashed border-pink-500/30 bg-slate-950/40 p-4 text-sm text-slate-400">
-                            No female players match your search.
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  </>
-                )}
-              </div>
+                  <section className="col-start-2 row-start-2 flex min-h-0 flex-col rounded-xl border border-pink-500/25 bg-slate-950/50 p-2.5 sm:p-3 lg:col-start-3 lg:row-start-1">
+                    <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-pink-300">Female</h3>
+                      <span className="rounded-full bg-pink-500/20 px-2 py-0.5 text-[11px] font-medium text-pink-200 lg:hidden">
+                        {filteredFemalePlayers.length}
+                      </span>
+                    </div>
+                    <div className="min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-[min(50vh,32rem)] sm:max-h-[min(58vh,36rem)] lg:max-h-[min(68vh,44rem)]">
+                      {filteredFemalePlayers.map((player) => renderSetupPlayerRow(player))}
+                      {filteredFemalePlayers.length === 0 && (
+                        <p className="text-xs text-slate-500">No female players match.</p>
+                      )}
+                    </div>
+                  </section>
+                </div>
+              )}
             </div>
           </section>
         )}
 
         {userIsAdmin && screen === "live" && (
-          <section className="space-y-4">
-            <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-400">Live game</p>
-                  <h2 className="mt-1 text-2xl font-semibold text-white">
-                    {getTeamLabel(matchup.home)} vs {getTeamLabel(matchup.away)}
-                  </h2>
-                  <p className="mt-1 text-sm text-slate-300">{date}</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-100">
-                    Score: {matchupScore.home} - {matchupScore.away}
-                  </p>
+          <section className="grid gap-3 lg:grid-cols-[minmax(0,18rem)_1fr] xl:grid-cols-[minmax(0,20rem)_1fr]">
+            <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
+              <div className="rounded-[1.75rem] border border-slate-800 bg-slate-900/90 p-3 shadow-xl sm:p-4">
+                <p className="text-xs font-medium text-slate-400">Date</p>
+                <p className="mt-1 text-sm font-semibold text-white">{date}</p>
+
+                <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                  <div className="min-w-0 text-center">
+                    <p className="truncate text-xs text-slate-500">{getTeamLabel(matchup.home)}</p>
+                    <p className="mt-1 text-3xl font-bold tabular-nums text-white">{matchupScore.home}</p>
+                  </div>
+                  <span className="pb-2 text-xs font-semibold text-slate-500">vs</span>
+                  <div className="min-w-0 text-center">
+                    <p className="truncate text-xs text-slate-500">{getTeamLabel(matchup.away)}</p>
+                    <p className="mt-1 text-3xl font-bold tabular-nums text-white">{matchupScore.away}</p>
+                  </div>
+                </div>
+                <p className="mt-1 text-center text-[11px] uppercase tracking-wide text-slate-500">Goals</p>
+
+                <div className="mt-3 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-center">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Time left</p>
+                  <p className="text-2xl font-semibold tabular-nums text-white">{formatTime(timerSeconds)}</p>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <div className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-center">
-                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Time left</p>
-                    <p className="text-2xl font-semibold text-white">{formatTime(timerSeconds)}</p>
-                  </div>
+                <div className="mt-3 flex flex-col gap-2">
                   <button
                     type="button"
                     onClick={() => setTimerRunning((current) => !current)}
-                    className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white"
+                    className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"
                   >
                     {timerRunning ? "Pause" : "Resume"}
                   </button>
                   <button
                     type="button"
-                    onClick={undoLastEntry}
-                    className="rounded-2xl bg-slate-800 px-4 py-3 text-sm font-medium text-white"
-                  >
-                    Undo last
-                  </button>
-                  <button
-                    type="button"
                     onClick={endGame}
-                    className="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white"
+                    className="w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white"
                   >
                     End game
                   </button>
                 </div>
+
+                <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-center">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">MPV</p>
+                  <p className="truncate text-sm font-semibold text-white">{bestPlayerToday.name}</p>
+                  <p className="text-xs text-slate-400">{bestPlayerToday.percentage}%</p>
+                </div>
               </div>
+
+              <section className="rounded-[1.75rem] border border-slate-800 bg-slate-900/90 p-3 shadow-xl sm:p-4">
+                <h3 className="text-sm font-semibold text-white">Recent activity</h3>
+                <div className="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
+                  {logEntries.length === 0 ? (
+                    <p className="text-xs text-slate-400">No actions yet.</p>
+                  ) : (
+                    logEntries.slice(0, 8).map((entry) => (
+                      <div key={entry.id} className="rounded-lg bg-slate-950 px-2.5 py-2">
+                        <p className="truncate text-sm font-medium text-white">{entry.playerName}</p>
+                        <p className="text-xs text-slate-400">
+                          {STAT_ABBR[entry.statType]} · {entry.timestampLabel}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
             </div>
 
-              <div className="grid gap-4 xl:grid-cols-[1.6fr_0.8fr]">
-              <div className="grid gap-4 lg:grid-cols-2">
-                {renderPlayerCards(matchupPlayers.home, matchup.home, getTeamLabel(matchup.home))}
-                {renderPlayerCards(matchupPlayers.away, matchup.away, getTeamLabel(matchup.away))}
-              </div>
+            <div className="flex min-h-0 flex-col rounded-[1.75rem] border border-slate-800 bg-slate-900/90 p-3 shadow-xl sm:p-4">
+              <h2 className="mb-3 shrink-0 text-base font-semibold text-white sm:text-lg">Live scoring</h2>
 
-              <aside className="space-y-4">
-                <section className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-                  <h3 className="text-lg font-semibold text-white">Recent activity</h3>
-                  <div className="mt-3 space-y-2">
-                    {logEntries.length === 0 ? (
-                      <div className="rounded-2xl bg-slate-950 p-4 text-sm text-slate-400">
-                        No actions yet. Tap a stat button to start logging.
-                      </div>
-                    ) : (
-                      logEntries.slice(0, 6).map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="flex items-center justify-between rounded-2xl bg-slate-950 p-3"
-                        >
-                          <div>
-                            <p className="font-medium text-white">{entry.playerName}</p>
-                            <p className="text-sm text-slate-400">
-                              {getTeamLabel(entry.team)} · {entry.statType}
-                            </p>
-                          </div>
-                          <span className="text-sm font-medium text-slate-400">{entry.timestampLabel}</span>
-                        </div>
-                      ))
-                    )}
+              <div className="grid min-h-0 flex-1 grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-stretch">
+                <div className="col-start-1 row-start-2 lg:row-start-1">
+                  {renderLiveTeamPanel(
+                    matchupPlayers.home,
+                    matchup.home,
+                    getTeamLabel(matchup.home),
+                    { embedded: true },
+                  )}
+                </div>
+
+                <div className="col-span-2 col-start-1 row-start-1 flex items-stretch justify-center lg:col-span-1 lg:col-start-2 lg:row-start-1">
+                  <div className="flex w-full items-center justify-center gap-4 rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 lg:w-auto lg:flex-col lg:gap-5 lg:border-x lg:border-y-0 lg:bg-transparent lg:px-3 lg:py-8">
+                    <div className="min-w-0 text-center">
+                      <p className={`truncate text-[10px] font-medium uppercase tracking-wide ${getTeamAccent(matchup.home).label}`}>
+                        {getTeamLabel(matchup.home)}
+                      </p>
+                      <p className="mt-1 text-2xl font-bold text-white">{matchupScore.home}</p>
+                    </div>
+                    <div className="h-10 w-px shrink-0 bg-slate-600 lg:h-auto lg:min-h-[4rem] lg:w-px" />
+                    <div className="min-w-0 text-center">
+                      <p className={`truncate text-[10px] font-medium uppercase tracking-wide ${getTeamAccent(matchup.away).label}`}>
+                        {getTeamLabel(matchup.away)}
+                      </p>
+                      <p className="mt-1 text-2xl font-bold text-white">{matchupScore.away}</p>
+                    </div>
                   </div>
-                </section>
+                </div>
 
-                <section className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-                  <h3 className="text-lg font-semibold text-white">MPV today</h3>
-                  <p className="mt-3 text-3xl font-semibold text-white">
-                    {bestPlayerToday.name}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {bestPlayerToday.percentage}% of weighted contributions
-                  </p>
-                </section>
-              </aside>
+                <div className="col-start-2 row-start-2 lg:col-start-3 lg:row-start-1">
+                  {renderLiveTeamPanel(
+                    matchupPlayers.away,
+                    matchup.away,
+                    getTeamLabel(matchup.away),
+                    { embedded: true },
+                  )}
+                </div>
+              </div>
             </div>
           </section>
         )}
@@ -1720,14 +1774,6 @@ export default function Home() {
           <section className="space-y-4">
             {userIsAdmin ? (
               <>
-                <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-5 shadow-xl">
-                  <p className="text-sm font-medium text-slate-400">Step 3</p>
-                  <h2 className="mt-1 text-2xl font-semibold text-white">Review before saving</h2>
-                  <p className="mt-2 text-sm text-slate-300">
-                    Check the totals, confirm the timer, and save the game to the dashboard.
-                  </p>
-                </div>
-
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="rounded-[2rem] border border-slate-800 bg-slate-900/90 p-4 shadow-xl">
                     <p className="text-sm text-slate-400">Date</p>
