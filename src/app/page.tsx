@@ -1617,11 +1617,9 @@ export default function Home() {
                 </div>
               </div>
 
-              {filteredSetupPlayers.length === 0 ? (
+              {allSetupPlayers.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-600 bg-slate-950/40 p-3 text-sm text-slate-400">
-                  {playerSearch.trim()
-                    ? "No players match your search."
-                    : "No players in the roster yet."}
+                  No players in the roster yet.
                 </div>
               ) : (
                 <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-stretch">
@@ -1632,7 +1630,9 @@ export default function Home() {
                     <div className="min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-[min(50vh,32rem)] sm:max-h-[min(58vh,36rem)] lg:max-h-[min(68vh,44rem)]">
                       {filteredMalePlayers.map((player) => renderSetupPlayerRow(player))}
                       {filteredMalePlayers.length === 0 && (
-                        <p className="text-xs text-slate-500">No male players match.</p>
+                        <p className="text-xs text-slate-500">
+                          {playerSearch.trim() ? "No male players match." : "No male players."}
+                        </p>
                       )}
                     </div>
                   </section>
@@ -1655,7 +1655,9 @@ export default function Home() {
                     <div className="min-h-0 space-y-1.5 overflow-y-auto pr-1 max-h-[min(50vh,32rem)] sm:max-h-[min(58vh,36rem)] lg:max-h-[min(68vh,44rem)]">
                       {filteredFemalePlayers.map((player) => renderSetupPlayerRow(player))}
                       {filteredFemalePlayers.length === 0 && (
-                        <p className="text-xs text-slate-500">No female players match.</p>
+                        <p className="text-xs text-slate-500">
+                          {playerSearch.trim() ? "No female players match." : "No female players."}
+                        </p>
                       )}
                     </div>
                   </section>
